@@ -1,21 +1,15 @@
-import geopandas as gpd
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import matplotlib.pyplot as plt
 import calendar
 from dotenv import load_dotenv
-from pyproj import Geod
 
-from src.constants import *
-from src.codab import *
-from src.utils import *
+from src.datasources.codab import load_codab_from_blob
+from src.utils.utils_fun import *
 
 load_dotenv()
 AA_DATA_DIR = os.getenv("AA_DATA_DIR")
 MMR_UTM = 32647
 agg_level = "col_name"
-gdf_adm = load_codab(admin_level=2)
+gdf_adm = load_codab_from_blob(admin_level=2)
 ibtracs_path = os.path.join(AA_DATA_DIR, "public/raw/glb/ibtracs")
 points_path = os.path.join(ibtracs_path, "IBTrACS.NI.list.v04r01.points.zip")
 
