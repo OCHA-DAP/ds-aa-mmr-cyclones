@@ -55,7 +55,7 @@ def plot_map_storms(gdf, adm, analysis_suff , trace: bool = False, save: bool = 
             title_fontsize=7,
             frameon=True
         )
-        suptitle = "Myanmar storm tracks after year 2000"
+        suptitle = "Myanmar storm tracks since 2006"
         title = "colored per storm_id"
 
     else:
@@ -76,7 +76,7 @@ def plot_map_storms(gdf, adm, analysis_suff , trace: bool = False, save: bool = 
             title_fontsize=8,
             frameon=True
         )
-        suptitle = "Myanmar storm tracks after year 2000"
+        suptitle = "Myanmar storm tracks since 2006"
         title = "highlighted landfall points in Rakhine"
 
     adm.boundary.plot(linewidth=0.2, ax=ax, color="k")
@@ -248,12 +248,30 @@ def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf
 
     for b, label in zip(bins[1:], labels):  # skip first (0)
         ax.axvline(b, color="grey", linestyle="--", alpha=0.7)
-        ax.text(
-            b, ax.get_ylim()[1], label,
-            rotation=90, verticalalignment="top", horizontalalignment="right",
-            fontsize=9, color="grey"
-        )
+        # ax.text(
+        #     b, ax.get_ylim()[1], label,
+        #     rotation=90, verticalalignment="top", horizontalalignment="right",
+        #     fontsize=9, color="grey"
+        # )
+    # Horizontal text labels between lines
+    y_top = ax.get_ylim()[1] * 0.98  # consistent height near the top
 
+    for left, right, label in zip(bins[:-1], bins[1:], labels):
+        if right == float("inf"):
+            continue
+
+        midpoint = (left + right) / 2
+
+        ax.text(
+            midpoint,
+            y_top,
+            label,
+            rotation=90,
+            ha="center",  # center horizontally between vertical lines
+            va="top",  # anchor near top
+            fontsize=9,
+            color="grey"
+        )
     # Legend for ADM1_EN
     for adm1, color in color_map.items():
         ax.scatter([], [], color=color, label=adm1)

@@ -1,5 +1,5 @@
+import pandas as pd
 from dotenv import load_dotenv
-
 # Load .env file into environment variables
 load_dotenv()
 
@@ -7,6 +7,7 @@ from src.datasources import imerg
 from src.datasources import codab
 from src.utils.utils_fun import *
 from src.utils.utils_plot import *
+from src.utils.constants import *
 
 # Define offsets in days
 offsets = [-1, 0, 1]
@@ -59,6 +60,10 @@ df_expanded["storm_name"] = (df_expanded["storm_id"].apply(lambda x: x.split('_'
 df_cerf = pd.read_csv(f"src/data/cerf_data.csv")
 df_full = df_expanded.merge(df_cerf[["sid", "Amount Approved"]], how="left", on="sid")
 df_full["cerf_allocation"] = np.where(df_full["Amount Approved"].isna(), "NO Allocation", "CERF allocation")
+
+# Load EMDAT data
+df_emdat = pd.read_csv(f"src/data/emdat_mmr.csv")
+df_full = df_full.merge(df_emdat[["sid", "Total Deaths", "Total Affected"]], how="left", on="sid")
 overview_situation(df_full, analysis_suff=suff, save=True, cerf=True, adm_level=adm_level)
 
 # Return period stuff

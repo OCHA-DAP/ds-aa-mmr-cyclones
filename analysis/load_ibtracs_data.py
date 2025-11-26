@@ -60,7 +60,7 @@ gdf_filtered["landfall_adm0_date"] = (
     .reindex(gdf_filtered["sid"])
     .values
 )
-gdf_filtered_recent = gdf_filtered[gdf_filtered["valid_time"].dt.year >= 2000]
+gdf_filtered_recent = gdf_filtered[gdf_filtered["valid_time"].dt.year >= 2006]
 plot_map_storms(gdf_filtered_recent, adm_boundaries, analysis_suff = suff, trace=True, save=True)
 plot_map_storms(gdf_filtered_recent, adm_boundaries, analysis_suff = suff, trace=False, save=True)
 
