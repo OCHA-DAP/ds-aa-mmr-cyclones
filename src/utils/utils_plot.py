@@ -281,6 +281,7 @@ def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bo
     ax.scatter([], [], color="k", marker="s", label="Landfall")
 
     ax.legend(title="Legend", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.title(f"{title_suff}")
     plt.tight_layout()
     if save:
         plt.savefig(f"mmr_overview_{analysis_suff}_{title_suff}.png", bbox_inches="tight", dpi=dpi)
@@ -398,7 +399,7 @@ def plot_storm_track_comparison(
 
         plt.show()
 
-def plot_rainfall_forecast(df, save:bool = True):
+def plot_rainfall_forecast(df, dataprovider:str, save:bool = True):
     storm_name = df.storm_name.iloc[0]
     fig, ax = plt.subplots(dpi=300)
     df = df.sort_values(["issued_date", "valid_date"])
@@ -432,5 +433,5 @@ def plot_rainfall_forecast(df, save:bool = True):
     )
     plt.tight_layout()
     if save:
-        plt.savefig(f"{storm_name}_rainfall_forecast.png", bbox_inches="tight", dpi=dpi)
+        plt.savefig(f"{storm_name}_rainfall_forecast_{dataprovider}.png", bbox_inches="tight", dpi=dpi)
     plt.show()

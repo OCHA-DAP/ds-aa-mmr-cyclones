@@ -11,11 +11,16 @@ import pickle
 meta = make_run_metadata(level=adm_level, areas= ADM_LIST)
 suff = make_suffix(meta=meta)
 
-def load_rainfall_forecast():
-    query = """
-    SELECT * FROM projects.ds_aa_mmr_cyclones_chirps_gefs
-    """
-    df = pd.read_sql(query, stratus.get_engine("dev"))
+def load_rainfall_forecast(chirps:bool=True):
+    if chirps:
+        query = """
+        SELECT * FROM projects.ds_aa_mmr_cyclones_chirps_gefs
+        """
+        df = pd.read_sql(query, stratus.get_engine("dev"))
+    else:
+        df = pd.read_csv("analysis/MMR_HRES_daily_rain_ADM1.csv")
+        rename_columns_dict = {"valid_time":"valid_date", "time":"issued_date", "rain_mm":"mean"}
+        df.rename(columns=rename_columns_dict, inplace=True)
     return df
 
 with open('src/data/storms_date.pickle', 'rb') as file:
@@ -27,7 +32,7 @@ df_long = storms_date.melt(
     value_name="date"
 )
 df_long["date"] = pd.to_datetime(df_long["date"])
-rainfall_forecast = load_rainfall_forecast()
+rainfall_forecast = load_rainfall_forecast(chirps=False)
 rainfall_forecast ["valid_date"] = pd.to_datetime(rainfall_forecast["valid_date"])
 rainfall_forecast_full = df_long.merge(rainfall_forecast, how="right", right_on="valid_date", left_on="date")
 rainfall_forecast_full.dropna(inplace=True)
@@ -51,11 +56,11 @@ rainfall_forecast_full=rainfall_forecast_full.merge(df_observed[["storm_name", "
 rainfall_forecast_full["landfall_adm0_date"] = pd.to_datetime(rainfall_forecast_full["landfall_adm0_date"])
 rainfall_forecast_full["landfall_adm0_date"]=rainfall_forecast_full["landfall_adm0_date"].dt.date
 rainfall_forecast_full["landfall_adm0_date"] = pd.to_datetime(rainfall_forecast_full["landfall_adm0_date"])
-for storm in rainfall_forecast_full["storm_name"].unique():
-    df_plot = rainfall_forecast_full[rainfall_forecast_full["storm_name"] == str(storm)]
-    plot_rainfall_forecast(df_plot, save=True)
+#for storm in rainfall_forecast_full["storm_name"].unique():
+#    df_plot = rainfall_forecast_full[rainfall_forecast_full["storm_name"] == str(storm)]
+#    plot_rainfall_forecast(df_plot, dataprovider="emcwf", save=True)
 
-rainfall_forecast_full["lead_time_landfall"] = (rainfall_forecast_full["landfall_adm0_date"] - rainfall_forecast_full["issued_date"]).dt.days
+rainfall_forecast_full["lead_time_landfall"] = (rainfall_forecast_full["landfall_adm0_date"] - rainfall_forecast_full["issued_date"]).dt.total_seconds() / 3600
 rainfall_forecast_filtered = rainfall_forecast_full[(rainfall_forecast_full["issued_date"] >= rainfall_forecast_full["landfall_adm0_date"] - pd.Timedelta(days=3)) &
     (rainfall_forecast_full["issued_date"] <= rainfall_forecast_full["landfall_adm0_date"] - pd.Timedelta(days=1))]
 
@@ -67,5 +72,5 @@ max_rainfall = rainfall_forecast_filtered.groupby(["storm_name", "issued_date", 
 df_all = df_observed.merge(max_rainfall, how="left", on="storm_name")
 for lead_time in df_all["lead_time_landfall"].unique():
     df_plot=df_all[df_all["lead_time_landfall"] == lead_time]
-    overview_situation(df_plot, analysis_suff=suff, y_column='rolling_sum_3', save=True, cerf=True, title_suff=f"forecast_{lead_time}")
+    overview_situation(df_plot, analysis_suff=suff, y_column='rolling_sum_3', save=True, cerf=True, title_suff=f"ecmwf_forecast_{lead_time}h")
 
