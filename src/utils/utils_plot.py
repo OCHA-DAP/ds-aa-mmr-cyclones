@@ -178,7 +178,7 @@ def plot_map_storms_speed_area_interest(gdf, adm, analysis_suff,  save: bool = F
     plt.show()
 
 
-def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf=False):
+def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bool = False, adm_level = 1, cerf=False, title_suff:str=""):
     adm_column = f"ADM{adm_level}_EN"
     unique_adms = df[adm_column].unique()
     n_adms = len(unique_adms)
@@ -207,7 +207,7 @@ def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf
     mask_circle = ~df["landfall"]
     ax.scatter(
         df.loc[mask_circle, "max_wind_speed_land"],
-        df.loc[mask_circle, "3days_rain_mean"],
+        df.loc[mask_circle, y_column],
         c=df.loc[mask_circle, color_column].map(color_map),
         marker="o", alpha=0.7, edgecolor="k", label=None
     )
@@ -216,7 +216,7 @@ def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf
     mask_square = df["landfall"]
     ax.scatter(
         df.loc[mask_square, "max_wind_speed_land"],
-        df.loc[mask_square, "3days_rain_mean"],
+        df.loc[mask_square, y_column],
         c=df.loc[mask_square, color_column].map(color_map),
         marker="s", alpha=0.7, edgecolor="k", label=None
     )
@@ -228,7 +228,7 @@ def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf
     # ✅ Add storm names as text
     for _, row in df.iterrows():
         ax.text(
-            row["max_wind_speed_land"], row["3days_rain_mean"],
+            row["max_wind_speed_land"], row[y_column],
             str(row["storm_name"]),
             fontsize=8, transform=offset_copy(ax.transData, x=3, y=3, units='points', fig=fig)
         )
@@ -281,9 +281,10 @@ def overview_situation(df, analysis_suff, save:bool = False, adm_level = 1, cerf
     ax.scatter([], [], color="k", marker="s", label="Landfall")
 
     ax.legend(title="Legend", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.title(f"{title_suff}")
     plt.tight_layout()
     if save:
-        plt.savefig(f"mmr_overview_{analysis_suff}.png", bbox_inches="tight", dpi=dpi)
+        plt.savefig(f"mmr_overview_{analysis_suff}_{title_suff}.png", bbox_inches="tight", dpi=dpi)
     plt.show()
 
 
@@ -397,3 +398,40 @@ def plot_storm_track_comparison(
             plt.savefig(f"{storm_name}_tracks_page_{fig_idx+1}.png", bbox_inches="tight", dpi=dpi)
 
         plt.show()
+
+def plot_rainfall_forecast(df, dataprovider:str, save:bool = True):
+    storm_name = df.storm_name.iloc[0]
+    fig, ax = plt.subplots(dpi=300)
+    df = df.sort_values(["issued_date", "valid_date"])
+
+    rainfall_observed = df["3days_rain_mean"].iloc[0]
+    landfall_date = df["landfall_adm0_date"].unique()[0]
+    # Unique issued dates
+    issued_dates = df["issued_date"].unique()
+    # Plot one line per issued_date
+    for issued in issued_dates:
+        sub = df[df["issued_date"] == issued]
+        ax.plot(
+            sub["valid_date"],
+            sub["rolling_sum_3"],
+            label=f"Issued {issued.date()}",
+            linewidth=2
+        )
+    ax.axvline(x=landfall_date)
+    ax.scatter(x=landfall_date, y=rainfall_observed, color="red", s=10, zorder=3)
+    plt.title(f"Rolling 3-day Sum for Storm: {storm_name}")
+    plt.xlabel("Valid Date")
+    plt.ylabel("Rolling Sum (3 days)")
+    plt.xticks(rotation=90)
+
+    plt.grid(True, alpha=0.3)
+    # Move legend outside the plot
+    plt.legend(
+        title="Issued Date",
+        bbox_to_anchor=(1.05, 1),
+        loc="upper left"
+    )
+    plt.tight_layout()
+    if save:
+        plt.savefig(f"{storm_name}_rainfall_forecast_{dataprovider}.png", bbox_inches="tight", dpi=dpi)
+    plt.show()
