@@ -5,6 +5,7 @@ dependencies:
   - python=3.11
   - python-dotenv
   - numpy
+  - ocha_stratus
   - scipy
   - pandas
   - gdal
