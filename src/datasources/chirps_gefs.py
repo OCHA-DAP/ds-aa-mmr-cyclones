@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 
 CHIRPS_GEFS_URL = (
     "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/daily_16day/"
+    "CHIRPS-GEFS_precip_v12/daily_{chirps_gefs_lead_time}day/"
     "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
     "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
 )
@@ -59,7 +59,7 @@ def download_recent_chirps_gefs():
         download_dates,
         disable=not sys.stdout.isatty(),
     ):
-        for leadtime in range(16):
+        for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
             download_chirps_gefs(
                 issue_date,
@@ -82,6 +82,7 @@ def download_chirps_gefs(
         valid_year=int(valid_date.year),
         valid_month=int(valid_date.month),
         valid_day=int(valid_date.day),
+        chirps_gefs_lead_time=int(constants.chirps_gefs_lead_time),
     )
     output_filename = (
         f"chirps-gefs-mmr_issued-"
@@ -173,7 +174,7 @@ def process_recent_chirps_gefs(verbose: bool = False):
                 print(f"Skipping {issue_date}, already processed")
             continue
         das_i = []
-        for leadtime in range(16):
+        for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
             try:
                 da_in = load_chirps_gefs_raster(issue_date, valid_date)

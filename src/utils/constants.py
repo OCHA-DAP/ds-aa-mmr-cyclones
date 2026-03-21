@@ -15,10 +15,11 @@ adm_pcode = f"ADM{adm_level}_PCODE"
 buffer_km = 1000
 windspeed_alert_level = 47
 rainfall_alert_level = 200
+chirps_gefs_lead_time = 16
 # Monitoring start date - only process data from this date forward
 # Set to Myanmar timezone so that dummy emails show intended date
 mmr_tz = pytz.timezone("Asia/Yangon")
-MONITORING_START_DATE = mmr_tz.localize(datetime(2025, 1, 1)).astimezone(
+MONITORING_START_DATE = mmr_tz.localize(datetime(2026, 3, 1)).astimezone(
     timezone.utc
 )
 
