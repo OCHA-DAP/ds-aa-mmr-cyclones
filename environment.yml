@@ -12,5 +12,4 @@ dependencies:
   - cartopy
   - xarray
   - pip
-  - pip:
-      - -e .
+  - pip: []
