@@ -18,7 +18,7 @@ jobs:
       with:
         miniforge-variant: Miniforge3
         use-mamba: true
-        activate-environment: climada-env
+        activate-environment: mmr-aa-cyclone
         environment-file: environment.yml
 
     - name: Run script
