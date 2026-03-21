@@ -1,0 +1,31 @@
+name: Download recent ECMWF data
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        use-mamba: true
+        activate-environment: climada-env
+        environment-file: environment.yml
+
+    - name: Run script
+      env:
+        DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
+        DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
+        AA_DATA_DIR_NEW: ${{ secrets.AA_DATA_DIR_NEW }}
+      run: |
+        python monitoring/rainfall_monitoring.py

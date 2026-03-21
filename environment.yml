@@ -1,0 +1,16 @@
+name: mmr-aa-cyclone
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - pandas
+  - gdal
+  - proj
+  - shapely
+  - cartopy
+  - xarray
+  - pip
+  - pip:
+      - -e .
