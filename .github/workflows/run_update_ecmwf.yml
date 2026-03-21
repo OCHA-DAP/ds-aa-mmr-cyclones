@@ -27,4 +27,4 @@ jobs:
         DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
         DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
       run: |
-        python src/monitoring/rainfall_monitoring.py
+          conda run -n mmr-aa-cyclone python src/monitoring/rainfall_monitoring.py
