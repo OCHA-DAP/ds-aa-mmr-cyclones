@@ -18,7 +18,7 @@ def load_rainfall_forecast(chirps:bool=True):
         """
         df = pd.read_sql(query, stratus.get_engine("dev"))
     else:
-        df = pd.read_csv("analysis/MMR_HRES_daily_rain_ADM1.csv")
+        df = pd.read_csv("historical_analysis/MMR_HRES_daily_rain_ADM1.csv")
         rename_columns_dict = {"valid_time":"valid_date", "time":"issued_date", "rain_mm":"mean"}
         df.rename(columns=rename_columns_dict, inplace=True)
     return df

@@ -12,6 +12,7 @@ adm_level = 1
 adm_column = f"ADM{adm_level}_EN"
 adm_pcode = f"ADM{adm_level}_PCODE"
 
+buffer_km = 1000
 windspeed_alert_level = 47
 rainfall_alert_level = 200
 # Monitoring start date - only process data from this date forward
@@ -58,9 +59,6 @@ CAT_LIMITS = [
     (CAT4, "Cat. 4"),
     (CAT5, "Cat. 5"),
 ]
-
-
-D_THRESH = 230
 
 THRESHS = {
     "readiness": {"s": 120, "lt_days": 5},

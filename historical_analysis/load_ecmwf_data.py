@@ -8,7 +8,7 @@ load_dotenv()
 from src.utils.utils_fun import *
 from src.utils.utils_fun import from_ms_to_knots
 from src.utils.utils_plot import *
-
+import  ocha_lens as lens
 meta = make_run_metadata(level=adm_level, areas= ADM_LIST)
 suff = make_suffix(meta=meta)
 
@@ -46,7 +46,7 @@ list_hist_storms_forecast = []
 #
 # df_hist_storms_forecast = pd.concat(list_hist_storms_forecast, ignore_index=True)
 # #Get track data
-# gdf_tracks = lens.ecmwf_storm.get_tracks(df_hist_storms_forecast)
+gdf_tracks = lens.ecmwf_storm.get_tracks(df_hist_storms_forecast)
 # gdf_tracks.to_csv(f"results/ecmw_tracks_{suff}.csv", index=False)
 gdf_tracks = pd.read_csv(f"results/ecmw_tracks_{suff}.csv")
 gdf_tracks["geometry"] = gdf_tracks["geometry"].apply(wkt.loads)
