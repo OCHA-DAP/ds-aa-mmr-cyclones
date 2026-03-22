@@ -5,6 +5,7 @@ dependencies:
   - python=3.11
   - python-dotenv
   - climada
+  - climada_petals
   - numpy
   - scipy
   - pandas
