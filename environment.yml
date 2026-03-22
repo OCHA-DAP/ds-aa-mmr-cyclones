@@ -9,6 +9,7 @@ dependencies:
   - pandas
   - gdal
   - proj
+  - pytz
   - shapely
   - cartopy
   - xarray
