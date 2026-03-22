@@ -17,7 +17,6 @@ import geopandas as gpd
 load_dotenv()
 logger = get_logger(__name__)
 
-from climada.hazard import TropCyclone, TCTracks
 from climada_petals.hazard.tc_tracks_forecast import TCForecast
 from climada.hazard.centroids import Centroids
 
