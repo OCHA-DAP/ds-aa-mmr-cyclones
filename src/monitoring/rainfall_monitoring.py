@@ -285,22 +285,19 @@ def main():
                 data=buffer.getvalue(),
                 blob_name=file_name,
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}",
+                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
                 content_type="text/csv"
             )
 
         # --- WIND STORMS ---
         if not wind_storms.empty:
-            file_name = f"{today}_{hour}_wind_exceedance.csv"
-            buffer = io.StringIO()
-            wind_storms.to_csv(buffer, index=False)
+            file_name = f"wind_exceedance_{today}_{hour}.csv"
 
-            stratus.upload_blob_data(
-                data=buffer.getvalue(),
+            stratus.upload_csv_to_blob(
+                df=wind_storms,
                 blob_name=file_name,
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}",
-                content_type="text/csv"
+                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
 
 # ----------------------------------------------------
