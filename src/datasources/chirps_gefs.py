@@ -151,8 +151,8 @@ def process_recent_chirps_gefs(verbose: bool = False):
     adm1 = codab.load_codab_from_blob(admin_level=1)
     adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM_LIST)]
     issue_date_range = pd.date_range(
-        start="2026-03-01",
-        end=datetime.date.today() + pd.DateOffset(days=1),
+        start="2026-03-25",
+        end=datetime.date.today(),
         freq="D",
     )
     unprocessed_issue_date_range = [
