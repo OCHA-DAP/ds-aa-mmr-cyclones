@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from src.datasources.chirps_gefs import (
-    download_recent_chirps_gefs, process_recent_chirps_gefs
+    download_recent_chirps_gefs, process_recent_chirps_gefs, check_chirps_gefs_trigger
 )
 from src.utils.logging import get_logger
 load_dotenv()
@@ -13,5 +13,9 @@ if __name__ == "__main__":
     download_recent_chirps_gefs()
 
     logger.info("Process recent CHIRPS-GEFS data...")
-    process_recent_chirps_gefs()
+    df=process_recent_chirps_gefs()
+
+    logger.info("Check CHIRPS-GEFS data against threshold")
+    check_chirps_gefs_trigger(df=df)
+
 

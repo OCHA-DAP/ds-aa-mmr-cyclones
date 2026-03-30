@@ -208,6 +208,7 @@ def process_recent_chirps_gefs(verbose: bool = False):
         f"mmr_chirps_gefs_mean_daily.parquet"
     )
     stratus.upload_parquet_to_blob(blob_name=blob_name, df=updated_df)
+    return updated_df
 
 
 def load_recent_chirps_gefs_mean_daily():
@@ -215,3 +216,20 @@ def load_recent_chirps_gefs_mean_daily():
         f"{constants.PROJECT_PREFIX}/processed/chirps_gefs/"
         "mmr_chirps_gefs_mean_daily.parquet"
     )
+
+def check_chirps_gefs_trigger(df: pd.DataFrame):
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    df = df.sort_values(["storm_name", "issued_date", "valid_date"])
+
+    df["rolling_sum_3"] = (
+        df.groupby(["storm_name", "issued_date"])["mean"]
+        .rolling(3, min_periods=1)
+        .sum()
+        .reset_index(level=[0, 1], drop=True)
+    )
+    df_trigger_rainfall = df[df["rolling_sum_3"]>=constants.rainfall_alert_level_forecast]
+    if not df_trigger_rainfall.empty:
+        file_name = f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance_{today}.csv"
+        stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
+        logger.info("Rainfall threshold exceeded.")
+

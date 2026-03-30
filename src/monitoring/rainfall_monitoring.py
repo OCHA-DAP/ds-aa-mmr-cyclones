@@ -24,7 +24,7 @@ from climada.hazard.centroids import Centroids
 # PARAMETERS
 # ----------------------------------------------------
 
-WIND_THRESHOLD = constants.windspeed_alert_level # wind speed threshold (knots)
+WIND_THRESHOLD = constants.wind_speed_alert_level # wind speed threshold (knots)
 
 
 # ----------------------------------------------------
@@ -260,9 +260,11 @@ def main():
             .reset_index()
         )
 
-        close_storms = close_storms[
+        close_storms_idx = close_storms[
             close_storms["min_dist_km"] <= constants.buffer_km
             ]
+
+        storms_area_interest = gdf_track[((gdf_track["storm_name"].isin(close_storms_idx["storm_name"])) & (gdf_track["source"].isin(close_storms_idx["source"])))]
 
         wind_storms = (
             gdf_track
@@ -272,35 +274,29 @@ def main():
         )
 
         wind_storms = wind_storms[
-            wind_storms["wind_speed_at_land"] >= constants.windspeed_alert_level
+            wind_storms["wind_speed_at_land"] >= constants.wind_speed_alert_level
             ]
 
         # --- CLOSE STORMS ---
-        if not close_storms.empty:
-            file_name = f"{today}_{hour}_close_storms.csv"
-            buffer = io.StringIO()
-            close_storms.to_csv(buffer, index=False)
+        if not storms_area_interest.empty:
+            file_name = f"monitoring_{today}_{hour}.csv"
 
-            stratus.upload_blob_data(
-                data=buffer.getvalue(),
+            stratus.upload_csv_to_blob(
+                df=storms_area_interest,
                 blob_name=file_name,
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}",
-                content_type="text/csv"
+                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
 
         # --- WIND STORMS ---
         if not wind_storms.empty:
-            file_name = f"{today}_{hour}_wind_exceedance.csv"
-            buffer = io.StringIO()
-            wind_storms.to_csv(buffer, index=False)
+            file_name = f"wind_exceedance_{today}_{hour}.csv"
 
-            stratus.upload_blob_data(
-                data=buffer.getvalue(),
+            stratus.upload_csv_to_blob(
+                df=wind_storms,
                 blob_name=file_name,
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}",
-                content_type="text/csv"
+                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
 
 # ----------------------------------------------------

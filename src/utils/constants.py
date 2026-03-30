@@ -12,9 +12,10 @@ adm_level = 1
 adm_column = f"ADM{adm_level}_EN"
 adm_pcode = f"ADM{adm_level}_PCODE"
 
-buffer_km = 1000
-windspeed_alert_level = 47
-rainfall_alert_level = 200
+buffer_km = 500
+wind_speed_alert_level = 47
+rainfall_alert_level_forecast = 175
+rainfall_alert_level_observational = 250
 chirps_gefs_lead_time = 16
 # Monitoring start date - only process data from this date forward
 # Set to Myanmar timezone so that dummy emails show intended date
@@ -31,17 +32,6 @@ def _parse_bool_env(env_var: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.lower() in ("true", "1", "yes", "on")
-
-
-# Main control flags
-DRY_RUN = _parse_bool_env("DRY_RUN", default=True)  # Safe default
-TEST_EMAIL = _parse_bool_env("TEST_EMAIL", default=True)  # Safe default
-FORCE_ALERT = _parse_bool_env("FORCE_ALERT", default=False)  # Off by default
-
-# this would actually be a better replacement way to deal w/ env vars
-# in the long run
-# def force_alert():
-#     return _parse_bool_env("FORCE_ALERT", default=False)
 
 
 # Saffir-Simpson scale (knots)
@@ -61,11 +51,6 @@ CAT_LIMITS = [
     (CAT5, "Cat. 5"),
 ]
 
-THRESHS = {
-    "readiness": {"s": 120, "lt_days": 5},
-    "action": {"s": 120, "lt_days": 3},
-    "obsv": {"p": 96.2, "s": 105},  # NEED TO UPDATE FOR PROD
-}
 
 MIN_EMAIL_DISTANCE = 1000
 
@@ -79,5 +64,3 @@ AA_DATA_DIR_NEW = os.getenv("AA_DATA_DIR_NEW")
 # CRS
 MMR_UTM = 32647
 ADM_LIST = ["Rakhine"]
-#ADM_LIST = ["Rakhine", "Ayeyarwady"]
-#ADM_LIST = ["Buthidaung", "Kyauktaw", "Maungdaw", "Mrauk-U","Pauktaw","Ponnagyun","Rathedaung","Sittwe","Minbya","Myebon"]
