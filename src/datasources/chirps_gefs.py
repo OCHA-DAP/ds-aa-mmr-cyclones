@@ -219,10 +219,10 @@ def load_recent_chirps_gefs_mean_daily():
 
 def check_chirps_gefs_trigger(df: pd.DataFrame):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    df = df.sort_values(["issued_date", "valid_date"])
+    df = df.sort_values(["issue_date", "valid_date"])
 
     df["rolling_sum_3"] = (
-        df.groupby(["issued_date"])["mean"]
+        df.groupby(["issue_date"])["mean"]
         .rolling(3, min_periods=1)
         .sum()
         .reset_index(level=[0, 1], drop=True)
