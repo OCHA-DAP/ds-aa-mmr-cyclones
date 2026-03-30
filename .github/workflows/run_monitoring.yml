@@ -30,5 +30,5 @@ jobs:
         DSCI_LISTMONK_API_USERNAME: ${{ secrets.DSCI_LISTMONK_API_USERNAME }}
         DSCI_LISTMONK_API_KEY: ${{ secrets.DSCI_LISTMONK_API_KEY }}
       run: |
-           conda run -n mmr-aa-cyclone python -m src.send_email
+           conda run -n mmr-aa-cyclone python -m src.monitoring.send_email
         

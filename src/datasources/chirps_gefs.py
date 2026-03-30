@@ -219,10 +219,10 @@ def load_recent_chirps_gefs_mean_daily():
 
 def check_chirps_gefs_trigger(df: pd.DataFrame):
     today = datetime.date.today().strftime("%Y-%m-%d")
-    df = df.sort_values(["storm_name", "issued_date", "valid_date"])
+    df = df.sort_values(["issued_date", "valid_date"])
 
     df["rolling_sum_3"] = (
-        df.groupby(["storm_name", "issued_date"])["mean"]
+        df.groupby(["issued_date"])["mean"]
         .rolling(3, min_periods=1)
         .sum()
         .reset_index(level=[0, 1], drop=True)
@@ -231,5 +231,5 @@ def check_chirps_gefs_trigger(df: pd.DataFrame):
     if not df_trigger_rainfall.empty:
         file_name = f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance_{today}.csv"
         stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
-        logger.info("Rainfall threshold exceeded.")
+        logger.debug("Rainfall threshold exceeded.")
 
