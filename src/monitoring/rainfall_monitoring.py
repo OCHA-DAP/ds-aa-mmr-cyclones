@@ -279,6 +279,7 @@ def main():
 
         # --- CLOSE STORMS ---
         if not storms_area_interest.empty:
+            logger.info("There are monitoring data to be uploaded to blob storage.")
             file_name = f"monitoring_{today}_{hour}.csv"
 
             stratus.upload_csv_to_blob(
@@ -287,9 +288,11 @@ def main():
                 stage="dev",
                 container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
+            logger.info("Monitoring data uploaded to blob storage.")
 
         # --- WIND STORMS ---
         if not wind_storms.empty:
+            logger.info("There are data exceeding the wind speed threshold.")
             file_name = f"wind_exceedance_{today}_{hour}.csv"
 
             stratus.upload_csv_to_blob(
@@ -298,6 +301,7 @@ def main():
                 stage="dev",
                 container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
+            logger.info("Data exceeding the wind speed threshold uploaded to blob storage.")
 
 # ----------------------------------------------------
 
