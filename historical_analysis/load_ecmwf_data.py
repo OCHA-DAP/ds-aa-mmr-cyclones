@@ -65,7 +65,7 @@ gdf_result["wind_speed_at_land_forecasted"] = gdf_result.apply(
     lambda row: row["wind_reduction_factor"] * row["wind_speed"], axis=1
 )
 gdf_result["3days_rain_mean"]=0
-gdf_result["trigger_at_land"]=run_trigger(gdf_result, windspeed_alert_level=windspeed_alert_level, rainfall_alert_level=rainfall_alert_level, windspeed_column="wind_speed_at_land_forecasted")
+gdf_result["trigger_at_land"]=run_trigger(gdf_result, wind_speed_alert_level=wind_speed_alert_level, rainfall_alert_level=rainfall_alert_level_forecast, windspeed_column="wind_speed_at_land_forecasted")
 gdf_result.rename(columns={"leadtime":"leadtime_forecast"}, inplace=True)
 gdf_result.drop_duplicates(inplace=True)
 

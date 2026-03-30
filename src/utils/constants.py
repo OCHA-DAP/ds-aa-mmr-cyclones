@@ -12,9 +12,10 @@ adm_level = 1
 adm_column = f"ADM{adm_level}_EN"
 adm_pcode = f"ADM{adm_level}_PCODE"
 
-buffer_km = 1000
-windspeed_alert_level = 47
-rainfall_alert_level = 200
+buffer_km = 500
+wind_speed_alert_level = 47
+rainfall_alert_level_forecast = 175
+rainfall_alert_level_observational = 250
 chirps_gefs_lead_time = 16
 # Monitoring start date - only process data from this date forward
 # Set to Myanmar timezone so that dummy emails show intended date

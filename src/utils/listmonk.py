@@ -1,4 +1,5 @@
 import os
+from typing import Dict
 
 import requests
 
@@ -98,14 +99,16 @@ def send_transactional(
     r.raise_for_status()
     return r.json()
 
-def generate_body_email(storm_name, date_myanmar):
+def generate_body_email(storm_name, date_myanmar, info:Dict=None):
     HTML_INTRO = f"""
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
     Dear colleagues,<br>
-    SOME CONTENT
+    A new forecast track has been released by ECMWF (European Centre for Medium-Range Weather Forecasts). Also included is the forecasted precipitation from CHIRPS-GEFS.<br>
+    Please find more information below.<br>
+    Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
+    Precipitation threshold: {info["precipitation_threshold_reached"]}<br>
     <br><br>
     """
-
     HTML_CONCLUSION = """
     <br>
     This email is purely informational and does not serve as an official notice for the anticipatory action framework. Official activation notices are sent in another email.

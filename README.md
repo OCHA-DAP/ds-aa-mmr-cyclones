@@ -5,7 +5,7 @@ In this repo:
 - Workflow running daily on new forecasts data
 
 # Data Sources used
-Windspeed: ECMWF data
+Wind_speed: ECMWF data
 Rainfall: CHIRPS-GEFS (forecast) and IMERGE (observations)
 
 # How to get started

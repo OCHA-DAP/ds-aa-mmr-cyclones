@@ -123,9 +123,9 @@ def convert_10m_wind_to_3m(xx:pd.Series):
     xx = pd.to_numeric(xx, errors="coerce")  # convert to float, turn invalid entries into NaN
     return xx * 1.05
 
-def run_trigger(df: pd.DataFrame, windspeed_alert_level:int, rainfall_alert_level:int, windspeed_column:str = "wind_speed"):
+def run_trigger(df: pd.DataFrame, wind_speed_alert_level:int, rainfall_alert_level:int, wind_speed_column:str = "wind_speed"):
 
-    xx = np.where((df[windspeed_column] >= windspeed_alert_level)|(df["3days_rain_mean"] >= rainfall_alert_level), True, False)
+    xx = np.where((df[wind_speed_column] >= wind_speed_alert_level) | (df["3days_rain_mean"] >= rainfall_alert_level), True, False)
     return xx
 
 def make_run_metadata(level, areas):
