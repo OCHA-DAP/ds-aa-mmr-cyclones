@@ -37,12 +37,16 @@ def check_rainfall_data():
 
 def check_cyclone_presence():
     xx = stratus.list_container_blobs(name_starts_with=f"{constants.PROJECT_PREFIX}/processed/monitoring")
-    xx.sort()
-    suffix = xx[-1].split("_")[1]
-    if suffix == datetime.date.today().strftime("%Y-%m-%d"):
-        df = stratus.load_csv_from_blob(blob_name=xx[-1])
-        return df
-    else :
+    if len(xx) != 0:
+        xx.sort()
+        suffix = xx[-1].split("_")[1]
+        if suffix == datetime.date.today().strftime("%Y-%m-%d"):
+            df = stratus.load_csv_from_blob(blob_name=xx[-1])
+            return df
+        else :
+            logger.info(f"No storms in the area of interest.")
+            return pd.DataFrame(None)
+    else:
         logger.info(f"No storms in the area of interest.")
         return pd.DataFrame(None)
 
