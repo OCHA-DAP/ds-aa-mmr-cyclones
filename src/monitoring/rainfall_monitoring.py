@@ -13,6 +13,7 @@ from src.utils.logging import get_logger
 from src.datasources import codab
 import src.utils.constants as constants
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -92,8 +93,11 @@ def filter_myanmar_tracks(tracks, buffer_km=200):
 
         df = track.to_dataframe().reset_index()
 
-        df["track_id"] = i
         df["storm_name"] = track.name
+        df["sid"] = track.sid
+        df["ensemble_number"] = track.ensemble_number
+        df["is_ensemble"] = track.is_ensemble
+        df["category"] = track.attrs.get("category", "N/A")
 
         dfs.append(df)
 
@@ -113,16 +117,7 @@ def filter_myanmar_tracks(tracks, buffer_km=200):
         predicate="within"
     ).drop(columns="index_right")
 
-    # --- Extract track IDs that intersect buffer ---
-    valid_ids = gdf_filtered["track_id"].unique()
-
-    # --- Filter original tracks ---
-    filtered_tracks = [
-        track for i, track in enumerate(tracks)
-        if i in valid_ids
-    ]
-
-    return filtered_tracks
+    return gdf_filtered
 
 
 # ----------------------------------------------------
@@ -152,11 +147,11 @@ def process_storm(track, gdf_land):
     gdf_track = compute_distance_to_land(gdf_track, gdf_land)
 
     # compute reduced wind
-    gdf_track = compute_land_wind(gdf_track)
+    gdf_track = compute_wind_speed_at_land(gdf_track)
 
     return gdf_track
 
-def compute_land_wind(gdf_track):
+def compute_wind_speed_at_land(gdf_track):
 
     gdf_track["wind_speed_knots"] = from_ms_to_knots(
         gdf_track["max_sustained_wind"]
@@ -199,6 +194,86 @@ def compute_distance_to_land(gdf_track, gdf_land):
 
 
 # ----------------------------------------------------
+# PLOT STORM TRACK
+# ----------------------------------------------------
+
+def plot_storm_track(storms_area_interest, adm_boundaries, today, hour):
+    """
+    Create a plot showing Myanmar boundaries, highlighted Rakhine state, 
+    storm track with lines connecting same ensemble/sid, and time labels.
+    """
+
+    fig, ax = plt.subplots(figsize=(14, 12))
+
+    # Load ADM1 boundaries to highlight Rakhine
+    adm1_boundaries = codab.load_codab_from_blob(admin_level=1)
+
+    # Plot all Myanmar boundaries
+    adm_boundaries.boundary.plot(ax=ax, color='black', linewidth=1.5)
+
+    # Highlight Rakhine state
+    rakhine = adm1_boundaries[adm1_boundaries['ADM1_EN'] == 'Rakhine']
+    if not rakhine.empty:
+        rakhine.plot(ax=ax, color='lightblue', alpha=0.5, edgecolor='gray', linewidth=1.5)
+
+    # Convert storm data to EPSG:4326
+    storms_area_interest_plot = storms_area_interest.to_crs(epsg=4326)
+
+    # Group by sid and ensemble_number to draw lines
+    grouped = storms_area_interest_plot.groupby(['sid', 'ensemble_number'])
+
+    for (sid, ensemble_num), group in grouped:
+        # Sort by time to ensure proper line connection
+        group = group.sort_values('time')
+
+        # Extract coordinates
+        lons = group.geometry.x.values
+        lats = group.geometry.y.values
+
+        # Plot line connecting the track points
+        ax.plot(lons, lats, color='red', linewidth=1, alpha=0.7)
+
+        # Plot points
+        group.plot(ax=ax, color='red', markersize=30, alpha=0.8, zorder=5)
+
+        # Add time labels to each point
+        for idx, row in group.iterrows():
+            time_str = pd.to_datetime(row['time']).strftime('%m-%d %H')
+            ax.annotate(
+                time_str,
+                xy=(row.geometry.x, row.geometry.y),
+                xytext=(5, 5),
+                textcoords='offset points',
+                fontsize=7,
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7)
+            )
+
+    # Add labels and title
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    ax.set_title('Cyclone Track over Myanmar', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+
+    # Save plot to bytes buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    buf.seek(0)
+    plt.close()
+
+    # Upload to blob storage
+    file_name = f"storm_track_plot_{today}_{hour}.png"
+    stratus.upload_blob_data(
+        data=buf,
+        blob_name=file_name,
+        stage="dev",
+        container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
+    )
+    logger.info(f"Storm track plot uploaded to blob storage: {file_name}")
+
+    return file_name
+
+
+# ----------------------------------------------------
 # MAIN WORKFLOW
 # ----------------------------------------------------
 
@@ -219,43 +294,24 @@ def main():
     tracks = download_tracks()
 
     logger.info("Filtering storms near Myanmar...")
-    filtered_tracks = filter_myanmar_tracks(tracks, buffer_km=2000)
+    gdf_filtered = filter_myanmar_tracks(tracks, buffer_km=2000)
 
-    if not filtered_tracks:
+    if gdf_filtered.empty:
         logger.info("No cyclones around Myanmar.")
         return
     else:
 
-        gdfs = []
-
-        for i, ds in enumerate(filtered_tracks):
-            df = ds.to_dataframe().reset_index()
-
-            # create geometry
-            gdf = gpd.GeoDataFrame(
-                df,
-                geometry=gpd.points_from_xy(df["lon"], df["lat"]),
-                crs="EPSG:4326"
-            )
-
-            # optional: keep track of source dataset
-            gdf["source"] = i
-            gdf["storm_name"] = ds.name
-
-            gdfs.append(gdf)
-
-        final_gdf = pd.concat(gdfs, ignore_index=True)
         gdf_track = compute_distance_to_land(
-            final_gdf,
+            gdf_filtered,
             gdf_adm_projected_filtered
         )
         # compute wind reduction
-        gdf_track = compute_land_wind(gdf_track)
+        gdf_track = compute_wind_speed_at_land(gdf_track)
 
 
         close_storms = (
             gdf_track
-            .groupby(["source", "storm_name"])["min_dist_km"]
+            .groupby(["sid", "ensemble_number"])["min_dist_km"]
             .min()
             .reset_index()
         )
@@ -264,11 +320,11 @@ def main():
             close_storms["min_dist_km"] <= constants.buffer_km
             ]
 
-        storms_area_interest = gdf_track[((gdf_track["storm_name"].isin(close_storms_idx["storm_name"])) & (gdf_track["source"].isin(close_storms_idx["source"])))]
+        storms_area_interest = gdf_track[((gdf_track["ensemble_number"].isin(close_storms_idx["ensemble_number"])) & (gdf_track["sid"].isin(close_storms_idx["sid"])))]
 
         wind_storms = (
             gdf_track
-            .groupby(["source", "storm_name"])["wind_speed_at_land"]
+            .groupby(["sid", "ensemble_number"])["wind_speed_at_land"]
             .max()
             .reset_index()
         )
@@ -289,6 +345,9 @@ def main():
                 container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
             logger.info("Monitoring data uploaded to blob storage.")
+
+            # Generate and upload plot
+            plot_storm_track(storms_area_interest, adm_boundaries, today, hour)
 
         # --- WIND STORMS ---
         if not wind_storms.empty:
