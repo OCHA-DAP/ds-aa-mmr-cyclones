@@ -99,16 +99,26 @@ def send_transactional(
     r.raise_for_status()
     return r.json()
 
-def generate_body_email(storm_name, date_myanmar, info:Dict=None):
+def generate_body_email(storm_name, date_myanmar, info:Dict=None, plot_url:str=None):
     HTML_INTRO = f"""
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
     Dear colleagues,<br>
     A new forecast track has been released by ECMWF (European Centre for Medium-Range Weather Forecasts). Also included is the forecasted precipitation from CHIRPS-GEFS.<br>
     Please find more information below.<br>
     Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
-    Precipitation threshold: {info["precipitation_threshold_reached"]}<br>
+    Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
     <br><br>
     """
+    
+    HTML_PLOT = ""
+    if plot_url:
+        HTML_PLOT = f"""
+        <div style="text-align: center;">
+            <img src="{plot_url}" alt="Storm Track Plot" style="max-width: 100%; height: auto;">
+        </div>
+        <br><br>
+        """
+
     HTML_CONCLUSION = """
     <br>
     This email is purely informational and does not serve as an official notice for the anticipatory action framework. Official activation notices are sent in another email.
@@ -118,4 +128,4 @@ def generate_body_email(storm_name, date_myanmar, info:Dict=None):
     Best regards,<br>
     OCHA Centre for Humanitarian Data
     """
-    return HTML_INTRO + HTML_CONCLUSION
+    return HTML_INTRO + HTML_PLOT + HTML_CONCLUSION

@@ -1,0 +1,32 @@
+name: Post Slack status update
+
+on:
+  schedule:
+    - cron: '15 09 * * *'
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        miniforge-variant: Miniforge3
+        use-mamba: true
+        activate-environment: mmr-aa-cyclone
+        environment-file: environment.yml
+
+    - name: Post to Slack
+      env:
+        DSCI_AZ_BLOB_DEV_SAS: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS }}
+        DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+        conda run -n mmr-aa-cyclone python -m src.monitoring.slack_bot

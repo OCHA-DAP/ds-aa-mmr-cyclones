@@ -50,17 +50,30 @@ def check_cyclone_presence():
         logger.info(f"No storms in the area of interest.")
         return pd.DataFrame(None)
 
+def get_latest_storm_track_plot():
+    xx = stratus.list_container_blobs(name_starts_with=f"{constants.PROJECT_PREFIX}/processed/storm_track_plot")
+    if len(xx) != 0:
+        xx.sort()
+        # Pattern: projects/ds-aa-mmr-cyclones/processed/storm_track_plot_YYYY-MM-DD_HH.png
+        filename = xx[-1].split("/")[-1]
+        date_part = filename.split("_")[3]
+        if date_part == datetime.date.today().strftime("%Y-%m-%d"):
+            plot_url = f"https://ochatest.blob.core.windows.net/{xx[-1]}"
+            return plot_url
+    return None
+
 
 myanmar_time=datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime("%Hh00 %d %b. %Y")
 df_wind_speed = check_wind_speed_trigger_data()
 df_rainfall = check_rainfall_data()
 df_cyclone = check_cyclone_presence()
+plot_url = get_latest_storm_track_plot()
 if df_wind_speed.empty and df_rainfall.empty:
     threshold_info = {"wind_speed_threshold_reached":"NOT REACHED", "rainfall_threshold_reached":"NOT REACHED"}
     logger.info("No thresholds were met, checking for existence of Cyclones to be monitored")
     if not df_cyclone.empty:
         storm_name = df_wind_speed.storm_name.unique() if not df_wind_speed.empty else df_cyclone.storm_name.unique()
-        campaign_body = generate_body_email(storm_name=storm_name, date_myanmar=myanmar_time, info=threshold_info)
+        campaign_body = generate_body_email(storm_name=storm_name, date_myanmar=myanmar_time, info=threshold_info, plot_url=plot_url)
         campaign_id = create_campaign(name="MMR_monitoring_email", body=campaign_body,
                                       subject=f"Anticipatory Action Myanmar - {myanmar_time}")
         send_campaign(campaign_id=campaign_id)
@@ -68,7 +81,7 @@ if df_wind_speed.empty and df_rainfall.empty:
 else:
     storm_name =  df_wind_speed.storm_name.unique()
     threshold_info = {"wind_speed_threshold_reached": "REACHED" if  not df_wind_speed.empty else "NOT REACHED", "rainfall_threshold_reached": "REACHED" if  not df_rainfall.empty else "NOT REACHED"}
-    campaign_body = generate_body_email(storm_name=storm_name, date_myanmar=myanmar_time, info=threshold_info)
+    campaign_body = generate_body_email(storm_name=storm_name, date_myanmar=myanmar_time, info=threshold_info, plot_url=plot_url)
     campaign_id = create_campaign(name="MMR_trigger_email", body=campaign_body, subject=f"Anticipatory Action Myanmar - {myanmar_time}")
     send_campaign(campaign_id=campaign_id)
     logger.info("Trigger email sent successfully!")
