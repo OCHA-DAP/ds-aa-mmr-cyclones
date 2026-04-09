@@ -231,5 +231,7 @@ def check_chirps_gefs_trigger(df: pd.DataFrame):
     if not df_trigger_rainfall.empty:
         file_name = f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance_{today}.csv"
         stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
-        logger.debug("Rainfall threshold exceeded.")
+        logger.info("Rainfall threshold exceeded.")
+    else:
+        logger.info("Rainfall threshold not exceeded.")
 
