@@ -6,6 +6,7 @@ See: https://api.slack.com/messaging/webhooks
 
 import datetime
 import os
+from dotenv import load_dotenv
 
 import ocha_stratus as stratus
 import requests
@@ -13,6 +14,7 @@ import requests
 import src.utils.constants as constants
 from src.utils.logging import get_logger
 
+load_dotenv()
 logger = get_logger(__name__)
 
 GITHUB_REPO = os.getenv("GITHUB_REPO", "ocha-dap/ds-aa-mmr-cyclones")
