@@ -1,3 +1,4 @@
+import base64
 import os
 from typing import Dict
 
@@ -99,7 +100,24 @@ def send_transactional(
     r.raise_for_status()
     return r.json()
 
-def generate_body_email(storm_name, date_myanmar, info:Dict=None, plot_url:str=None):
+def generate_body_email(
+    storm_name,
+    date_myanmar,
+    info: Dict = None,
+    plot_bytes: bytes | None = None,
+):
+    """Generate HTML email body for cyclone monitoring/trigger emails.
+
+    Args:
+        storm_name: Name of the storm.
+        date_myanmar: Formatted datetime string in Myanmar local time.
+        info: Dict with keys 'wind_speed_threshold_reached' and
+            'rainfall_threshold_reached'.
+        plot_bytes: Raw PNG bytes of the storm track plot, or None.
+
+    Returns:
+        HTML string for the email body.
+    """
     HTML_INTRO = f"""
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
     Dear colleagues,<br>
@@ -109,12 +127,13 @@ def generate_body_email(storm_name, date_myanmar, info:Dict=None, plot_url:str=N
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
     <br><br>
     """
-    
+
     HTML_PLOT = ""
-    if plot_url:
+    if plot_bytes is not None:
+        encoded = base64.b64encode(plot_bytes).decode("ascii")
         HTML_PLOT = f"""
         <div style="text-align: center;">
-            <img src="{plot_url}" alt="Storm Track Plot" style="max-width: 100%; height: auto;">
+            <img src="data:image/png;base64,{encoded}" alt="Storm Track Plot" style="max-width: 80%; height: auto;">
         </div>
         <br><br>
         """

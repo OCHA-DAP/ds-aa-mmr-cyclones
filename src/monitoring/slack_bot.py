@@ -67,7 +67,7 @@ def _latest_blob_today(prefix: str) -> list[str]:
     """Return blobs with given prefix updated today."""
     today = datetime.date.today().strftime("%Y-%m-%d")
     blobs = stratus.list_container_blobs(
-        name_starts_with=f"projects/{constants.PROJECT_PREFIX}/processed/{prefix}"
+        name_starts_with=f"{constants.PROJECT_PREFIX}/processed/{prefix}"
     )
     return [b for b in blobs if today in b]
 
