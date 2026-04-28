@@ -197,7 +197,7 @@ def compute_distance_to_land(gdf_track, gdf_land):
 # PLOT STORM TRACK
 # ----------------------------------------------------
 
-def plot_storm_track(storms_area_interest, adm_boundaries, today, hour):
+def plot_storm_track(storms_area_interest, adm_boundaries, today, hour, file_name:str=None):
     """
     Create a plot showing Myanmar boundaries, highlighted Rakhine state, 
     storm track with lines connecting same ensemble/sid, and time labels.
@@ -205,14 +205,11 @@ def plot_storm_track(storms_area_interest, adm_boundaries, today, hour):
 
     fig, ax = plt.subplots(figsize=(14, 12))
 
-    # Load ADM1 boundaries to highlight Rakhine
-    adm1_boundaries = codab.load_codab_from_blob(admin_level=1)
-
     # Plot all Myanmar boundaries
     adm_boundaries.boundary.plot(ax=ax, color='black', linewidth=1.5)
 
     # Highlight Rakhine state
-    rakhine = adm1_boundaries[adm1_boundaries['ADM1_EN'] == 'Rakhine']
+    rakhine = adm_boundaries[adm_boundaries['ADM1_EN'] == 'Rakhine']
     if not rakhine.empty:
         rakhine.plot(ax=ax, color='lightblue', alpha=0.5, edgecolor='gray', linewidth=1.5)
 
@@ -261,12 +258,13 @@ def plot_storm_track(storms_area_interest, adm_boundaries, today, hour):
     plt.close()
 
     # Upload to blob storage
-    file_name = f"storm_track_plot_{today}_{hour}.png"
+    if file_name is None:
+        file_name = f"storm_track_plot_{today}_{hour}.png"
     stratus.upload_blob_data(
         data=buf,
         blob_name=file_name,
         stage="dev",
-        container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
+        container_name=f"projects/{constants.PROJECT_PREFIX}/processed/storm_track_plot",
     )
     logger.info(f"Storm track plot uploaded to blob storage: {file_name}")
 
