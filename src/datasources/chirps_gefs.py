@@ -24,21 +24,30 @@ CHIRPS_GEFS_URL = (
 )
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
 
-def download_recent_chirps_gefs():
+def download_recent_chirps_gefs(
+    date: datetime.date | None = None,
+) -> None:
+    """Download recent CHIRPS-GEFS data up to the specified date.
+
+    Args:
+        date: The end date for the download range. Defaults to today.
+    """
+    if date is None:
+        date = datetime.date.today()
+
     adm0 = codab.load_codab_from_blob(admin_level=0)
     total_bounds = adm0.total_bounds
 
-    current_year = datetime.date.today().year
     issue_date_range = pd.date_range(
-        start=f"{current_year}-03-15",
-        end=datetime.date.today(),
+        start=f"{date.year}-03-15",
+        end=date,
         freq="D",
     )
 
     existing_files = stratus.list_container_blobs(
         name_starts_with=f"{constants.PROJECT_PREFIX}/"
         f"{CHIRPS_GEFS_BLOB_DIR}/"
-        f"chirps-gefs-mmr_issued-{current_year}"
+        f"chirps-gefs-mmr_issued-{date.year}"
     )
 
     existing_issue_dates = [
@@ -46,13 +55,14 @@ def download_recent_chirps_gefs():
         for f in existing_files
     ]
     logger.info(
-        f"Found {len(existing_issue_dates)} existing files for {current_year}"
+        f"Found {len(existing_issue_dates)} existing files for {date.year}"
     )
     download_dates = [
         d for d in issue_date_range if d not in existing_issue_dates
     ]
     logger.info(
-        f"Downloading {len(download_dates)} new issue dates for {current_year}: {[str(x.date()) for x in download_dates]}"  # noqa: E501
+        f"Downloading {len(download_dates)} new issue dates for {date.year}: "
+        f"{[str(x.date()) for x in download_dates]}"
     )
 
     for issue_date in tqdm(
@@ -137,8 +147,20 @@ def load_chirps_gefs_raster(
 
 
 
-def process_recent_chirps_gefs(verbose: bool = False):
-    """Process only 2026 CHIRPS-GEFS forecasts for Myanmar."""
+def process_recent_chirps_gefs(
+    date: datetime.date | None = None, verbose: bool = False
+) -> pd.DataFrame:
+    """Process recent CHIRPS-GEFS forecasts for Myanmar up to the specified date.
+
+    Args:
+        date: The end date for the processing range. Defaults to today.
+        verbose: Whether to print verbose output. Defaults to False.
+
+    Returns:
+        DataFrame with processed CHIRPS-GEFS mean daily data.
+    """
+    if date is None:
+        date = datetime.date.today()
     try:
         existing_df = load_recent_chirps_gefs_mean_daily()
     except ResourceNotFoundError:
@@ -151,8 +173,8 @@ def process_recent_chirps_gefs(verbose: bool = False):
     adm1 = codab.load_codab_from_blob(admin_level=1)
     adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM_LIST)]
     issue_date_range = pd.date_range(
-        start="2026-03-25",
-        end=datetime.date.today(),
+        start=f"{date.year}-03-25",
+        end=date,
         freq="D",
     )
     unprocessed_issue_date_range = [
@@ -217,8 +239,18 @@ def load_recent_chirps_gefs_mean_daily():
         "mmr_chirps_gefs_mean_daily.parquet"
     )
 
-def check_chirps_gefs_trigger(df: pd.DataFrame):
-    today = datetime.date.today().strftime("%Y-%m-%d")
+def check_chirps_gefs_trigger(
+    df: pd.DataFrame, date: datetime.date | None = None
+) -> None:
+    """Check CHIRPS-GEFS data against the rainfall threshold.
+
+    Args:
+        df: DataFrame with CHIRPS-GEFS mean daily data.
+        date: The date to use for output file naming. Defaults to today.
+    """
+    if date is None:
+        date = datetime.date.today()
+    date_str = date.strftime("%Y-%m-%d")
     df = df.sort_values(["issue_date", "valid_date"])
 
     df["rolling_sum_3"] = (
@@ -227,9 +259,14 @@ def check_chirps_gefs_trigger(df: pd.DataFrame):
         .sum()
         .reset_index(level=[0, 1], drop=True)
     )
-    df_trigger_rainfall = df[df["rolling_sum_3"]>=constants.rainfall_alert_level_forecast]
+    df_trigger_rainfall = df[
+        df["rolling_sum_3"] >= constants.rainfall_alert_level_forecast
+    ]
     if not df_trigger_rainfall.empty:
-        file_name = f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance_{today}.csv"
+        file_name = (
+            f"{constants.PROJECT_PREFIX}/processed/"
+            f"rainfall_exceedance_{date_str}.csv"
+        )
         stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
         logger.info("Rainfall threshold exceeded.")
     else:
