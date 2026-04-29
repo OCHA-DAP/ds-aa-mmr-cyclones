@@ -446,7 +446,8 @@ def plot_chirps_gefs_forecast(
     df: pd.DataFrame,
     today: str | None = None,
     file_name: str | None = None,
-) -> str:
+    save: bool = True,
+):
     """Create and upload a stacked bar chart of CHIRPS-GEFS forecast for Rakhine.
 
     Displays the 3-day rolling sum of precipitation per forecast date for the
@@ -461,7 +462,7 @@ def plot_chirps_gefs_forecast(
         file_name: Override the auto-generated blob file name.
 
     Returns:
-        The blob file name where the plot was uploaded.
+
     """
     if today is None:
         today = datetime.date.today().strftime("%Y-%m-%d")
@@ -495,14 +496,14 @@ def plot_chirps_gefs_forecast(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    ax.bar(x_pos, df_plot["contrib_d2"], bar_width, color=colors[0], label="Day t-2")
+    ax.bar(x_pos, df_plot["contrib_d2"], bar_width, color=colors[0], label="Day t+2")
     ax.bar(
         x_pos,
         df_plot["contrib_d1"],
         bar_width,
         bottom=df_plot["contrib_d2"],
         color=colors[1],
-        label="Day t-1",
+        label="Day t+1",
     )
     ax.bar(
         x_pos,
@@ -537,9 +538,9 @@ def plot_chirps_gefs_forecast(
     ax.set_xticks(list(x_pos))
     ax.set_xticklabels(date_labels, rotation=45, ha="right", fontsize=8)
     ax.set_xlabel("Date")
-    ax.set_ylabel("Total precipitation over 3 days (mm)")
+    ax.set_ylabel("Total precipitation over 3 days (mm) - forecasted")
     ax.set_title(
-        f"Total precipitation over 3 days, for Rakhine\n"
+        f"Total precipitation forecasted over 3 days, for Rakhine\n"
         f"(issued: {pd.Timestamp(latest_issue).strftime('%Y-%m-%d')})"
     )
     ax.legend(title="Date", loc="upper left")
@@ -552,15 +553,15 @@ def plot_chirps_gefs_forecast(
 
     if file_name is None:
         file_name = f"rainfall_forecast_plot_{today}.png"
+    if save:
+        stratus.upload_blob_data(
+            data=buf,
+            blob_name=file_name,
+            stage="dev",
+            container_name=(
+                f"projects/{constants.PROJECT_PREFIX}/processed/rainfall_forecast_plot"
+            ),
+        )
+        logger.info(f"Rainfall forecast plot uploaded to blob storage: {file_name}")
 
-    stratus.upload_blob_data(
-        data=buf,
-        blob_name=file_name,
-        stage="dev",
-        container_name=(
-            f"projects/{constants.PROJECT_PREFIX}/processed/rainfall_forecast_plot"
-        ),
-    )
-    logger.info(f"Rainfall forecast plot uploaded to blob storage: {file_name}")
-
-    return file_name
+    return fig, ax

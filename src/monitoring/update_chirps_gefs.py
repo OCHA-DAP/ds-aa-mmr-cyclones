@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from src.datasources.chirps_gefs import (
     download_recent_chirps_gefs, process_recent_chirps_gefs, check_chirps_gefs_trigger
 )
+from src.utils.utils_plot import plot_chirps_gefs_forecast
 from src.utils.logging import get_logger
 load_dotenv()
 logger = get_logger(__name__)
@@ -17,5 +18,8 @@ if __name__ == "__main__":
 
     logger.info("Check CHIRPS-GEFS data against threshold")
     check_chirps_gefs_trigger(df=df)
+
+    logger.info("Save CHIRPS-GEFS data")
+    plot_chirps_gefs_forecast(df)
 
 
