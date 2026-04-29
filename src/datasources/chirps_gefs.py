@@ -39,7 +39,7 @@ def download_recent_chirps_gefs(
     total_bounds = adm0.total_bounds
 
     issue_date_range = pd.date_range(
-        start=f"{date.year}-03-15",
+        start=f"2026-03-15",
         end=date,
         freq="D",
     )
