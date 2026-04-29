@@ -1,6 +1,6 @@
 import base64
 import os
-from typing import Dict
+from typing import Dict, List
 
 import requests
 
@@ -104,7 +104,7 @@ def generate_body_email(
     storm_name,
     date_myanmar,
     info: Dict = None,
-    plot_bytes: bytes | None = None,
+    plot_bytes: List[bytes] | None = None,
 ):
     """Generate HTML email body for cyclone monitoring/trigger emails.
 
@@ -113,7 +113,7 @@ def generate_body_email(
         date_myanmar: Formatted datetime string in Myanmar local time.
         info: Dict with keys 'wind_speed_threshold_reached' and
             'rainfall_threshold_reached'.
-        plot_bytes: Raw PNG bytes of the storm track plot, or None.
+        plot_bytes: list of Raw PNG bytes of the needed plot, or None.
 
     Returns:
         HTML string for the email body.
@@ -128,15 +128,15 @@ def generate_body_email(
     <br><br>
     """
 
-    HTML_PLOT = ""
     if plot_bytes is not None:
-        encoded = base64.b64encode(plot_bytes).decode("ascii")
-        HTML_PLOT = f"""
-        <div style="text-align: center;">
-            <img src="data:image/png;base64,{encoded}" alt="Storm Track Plot" style="max-width: 80%; height: auto;">
-        </div>
-        <br><br>
-        """
+        for plot in plot_bytes:
+            encoded = base64.b64encode(plot).decode("ascii")
+            HTML_PLOT = f"""
+            <div style="text-align: center;">
+                <img src="data:image/png;base64,{encoded}" alt="Missing Plot" style="max-width: 80%; height: auto;">
+            </div>
+            <br><br>
+            """
 
     HTML_CONCLUSION = """
     <br>

@@ -1,17 +1,22 @@
-import geopandas as gpd
-import matplotlib as mpl
-import pandas as pd
+import datetime
+import io
 import math
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import geopandas as gpd
+import matplotlib as mpl
 import matplotlib.cm as cm
 import matplotlib.lines as mlines
-
-
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import ocha_stratus as stratus
+import pandas as pd
 from matplotlib.transforms import offset_copy
 
+import src.utils.constants as constants
 from src.utils.constants import ADM_LIST
+from src.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 dpi = 400
 
@@ -435,3 +440,128 @@ def plot_rainfall_forecast(df, dataprovider:str, save:bool = True):
     if save:
         plt.savefig(f"{storm_name}_rainfall_forecast_{dataprovider}.png", bbox_inches="tight", dpi=dpi)
     plt.show()
+
+
+def plot_chirps_gefs_forecast(
+    df: pd.DataFrame,
+    today: str | None = None,
+    file_name: str | None = None,
+    save: bool = True,
+):
+    """Create and upload a stacked bar chart of CHIRPS-GEFS forecast for Rakhine.
+
+    Displays the 3-day rolling sum of precipitation per forecast date for the
+    most recent issue date. Each bar is split into daily contributions (day t,
+    t-1, t-2), and a dashed threshold line marks the rainfall alert level.
+
+    Args:
+        df: DataFrame with columns 'issue_date', 'valid_date', and 'mean'.
+            May optionally include a pre-computed 'rolling_sum_3' column.
+        today: Date string (YYYY-MM-DD) used in the blob file name.
+            Defaults to today's date.
+        file_name: Override the auto-generated blob file name.
+
+    Returns:
+
+    """
+    if today is None:
+        today = datetime.date.today().strftime("%Y-%m-%d")
+
+    df = df.copy()
+    if "rolling_sum_3" not in df.columns:
+        df = df.sort_values(["issue_date", "valid_date"])
+        df["rolling_sum_3"] = (
+            df.groupby("issue_date")["mean"]
+            .rolling(3, min_periods=1)
+            .sum()
+            .reset_index(level=0, drop=True)
+        )
+
+    latest_issue = df["issue_date"].max()
+    df_plot = (
+        df[df["issue_date"] == latest_issue]
+        .sort_values("valid_date")
+        .reset_index(drop=True)
+    )
+
+    # Stacked segments: contributions from d-2, d-1, and d to the rolling sum
+    df_plot["contrib_d2"] = df_plot["mean"].shift(periods=2, fill_value=0.0)
+    df_plot["contrib_d1"] = df_plot["mean"].shift(periods=1, fill_value=0.0)
+    df_plot["contrib_d0"] = df_plot["mean"]
+
+    x_pos = range(len(df_plot))
+    bar_width = 0.6
+    colors = ["#8ecae6", "#f4a261", "#a0522d"]
+    date_labels = pd.to_datetime(df_plot["valid_date"]).dt.strftime("%Y-%m-%d")
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    ax.bar(x_pos, df_plot["contrib_d2"], bar_width, color=colors[0], label="Day t+2")
+    ax.bar(
+        x_pos,
+        df_plot["contrib_d1"],
+        bar_width,
+        bottom=df_plot["contrib_d2"],
+        color=colors[1],
+        label="Day t+1",
+    )
+    ax.bar(
+        x_pos,
+        df_plot["contrib_d0"],
+        bar_width,
+        bottom=df_plot["contrib_d2"] + df_plot["contrib_d1"],
+        color=colors[2],
+        label="Day t",
+    )
+
+    for i, row in df_plot.iterrows():
+        ax.text(
+            i,
+            row["rolling_sum_3"] + 1,
+            str(int(round(row["rolling_sum_3"]))),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
+
+    threshold = constants.rainfall_alert_level_forecast
+    ax.axhline(y=threshold, color="crimson", linestyle="--", linewidth=1.5)
+    ax.text(
+        len(df_plot) - 0.5,
+        threshold + 2,
+        f"Threshold: {threshold} mm",
+        color="crimson",
+        fontsize=9,
+        ha="right",
+    )
+
+    ax.set_xticks(list(x_pos))
+    ax.set_xticklabels(date_labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Total precipitation over 3 days (mm) - forecasted")
+    ax.set_title(
+        f"Total precipitation forecasted over 3 days, for Rakhine\n"
+        f"(issued: {pd.Timestamp(latest_issue).strftime('%Y-%m-%d')})"
+    )
+    ax.legend(title="Date", loc="upper left")
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    buf.seek(0)
+    plt.close()
+
+    if file_name is None:
+        file_name = f"rainfall_forecast_plot_{today}.png"
+    if save:
+        stratus.upload_blob_data(
+            data=buf,
+            blob_name=file_name,
+            stage="dev",
+            container_name=(
+                f"projects/{constants.PROJECT_PREFIX}/processed/rainfall_forecast_plot"
+            ),
+        )
+        logger.info(f"Rainfall forecast plot uploaded to blob storage: {file_name}")
+
+    return fig, ax
