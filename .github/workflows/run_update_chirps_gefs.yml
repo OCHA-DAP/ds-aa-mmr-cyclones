@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '50 8 * * *'
   workflow_dispatch:
+    inputs:
+      date:
+        description: 'Date to process (YYYY-MM-DD). Leave empty for today.'
+        required: false
+        default: ''
 
 jobs:
   run-script:
@@ -28,4 +33,8 @@ jobs:
         DSCI_AZ_BLOB_DEV_SAS_WRITE: ${{ secrets.DSCI_AZ_BLOB_DEV_SAS_WRITE }}
         DSCI_AZ_BLOB_PROD_SAS: ${{ secrets.DSCI_AZ_BLOB_PROD_SAS }}
       run: |
-          conda run -n mmr-aa-cyclone python -m src.monitoring.update_chirps_gefs
+          DATE_ARG=""
+          if [ -n "${{ inputs.date }}" ]; then
+            DATE_ARG="--date ${{ inputs.date }}"
+          fi
+          conda run -n mmr-aa-cyclone python -m src.monitoring.update_chirps_gefs $DATE_ARG
