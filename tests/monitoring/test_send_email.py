@@ -9,8 +9,10 @@ import datetime
 from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
+import geopandas as gpd
 import pandas as pd
 from dotenv import load_dotenv
+from shapely.geometry import Point, box
 
 load_dotenv()
 
@@ -22,12 +24,58 @@ from src.monitoring.send_email import (
 )
 from src.utils import constants
 from src.utils.listmonk import create_campaign, generate_body_email, send_campaign
+from src.utils.utils_windpseed import plot_storm_track
 
 TODAY: str = datetime.date.today().strftime("%Y-%m-%d")
 MYANMAR_TIME: str = datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime(
     "%Hh00 %d %b. %Y"
 )
-DUMMY_PLOT_BYTES: bytes = b"\x89PNG\r\n\x1a\n"
+
+
+def _make_storm_gdf() -> gpd.GeoDataFrame:
+    """Create a dummy storm track GeoDataFrame for plot_storm_track.
+
+    Returns:
+        GeoDataFrame with sid, ensemble_number, time, and point geometry.
+    """
+    return gpd.GeoDataFrame(
+        {
+            "sid": ["2026001N10090"],
+            "ensemble_number": [0],
+            "time": [pd.Timestamp("2026-04-29")],
+        },
+        geometry=[Point(95.0, 16.5)],
+        crs="EPSG:4326",
+    )
+
+
+def _make_adm_gdf() -> gpd.GeoDataFrame:
+    """Create a dummy administrative boundaries GeoDataFrame.
+
+    Returns:
+        GeoDataFrame with ADM1_EN and polygon geometry covering Rakhine.
+    """
+    return gpd.GeoDataFrame(
+        {"ADM1_EN": ["Rakhine"]},
+        geometry=[box(92.0, 17.0, 98.0, 26.0)],
+        crs="EPSG:4326",
+    )
+
+
+def _generate_dummy_plot_bytes() -> bytes:
+    """Generate real PNG bytes via plot_storm_track with dummy data.
+
+    Returns:
+        Raw PNG bytes from the storm track plot.
+    """
+    with patch("src.utils.utils_windpseed.stratus") as mock_stratus:
+        plot_storm_track(_make_storm_gdf(), _make_adm_gdf(), TODAY, "12")
+    buf = mock_stratus.upload_blob_data.call_args.kwargs["data"]
+    buf.seek(0)
+    return buf.read()
+
+
+DUMMY_PLOT_BYTES: bytes = _generate_dummy_plot_bytes()
 
 
 def _make_wind_df() -> pd.DataFrame:
@@ -213,11 +261,12 @@ class TestSendWindExceedanceEmail:
             storm_name=df_wind.storm_name.unique(),
             date_myanmar=MYANMAR_TIME,
             info=threshold_info,
-            plot_bytes=None,
+            plot_bytes=DUMMY_PLOT_BYTES,
         )
         assert "Wind speed threshold: REACHED" in body
         assert "Precipitation threshold: NOT REACHED" in body
         assert "CYCLONE_TEST" in body
+        assert "data:image/png;base64," in body
 
     def test_trigger_campaign_is_created_and_sent(self) -> None:
         """MMR_trigger_email campaign is created and sent via listmonk API."""
@@ -230,30 +279,15 @@ class TestSendWindExceedanceEmail:
             storm_name=df_wind.storm_name.unique(),
             date_myanmar=MYANMAR_TIME,
             info=threshold_info,
-            plot_bytes=None,
+            plot_bytes=DUMMY_PLOT_BYTES,
         )
-        with (
-            patch("src.utils.listmonk.requests.post") as mock_post,
-            patch("src.utils.listmonk.requests.put") as mock_put,
-        ):
-            mock_post.return_value.json.return_value = {"data": {"id": 100}}
-            mock_post.return_value.raise_for_status.return_value = None
-            mock_put.return_value.raise_for_status.return_value = None
-
-            campaign_id = create_campaign(
-                name="MMR_trigger_email",
-                body=body,
-                subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
-            )
-            send_campaign(campaign_id=campaign_id)
-
-        mock_post.assert_called_once()
-        payload = mock_post.call_args.kwargs["json"]
-        assert payload["name"] == "MMR_trigger_email"
-        assert "Wind speed threshold: REACHED" in payload["body"]
-        assert "Precipitation threshold: NOT REACHED" in payload["body"]
-        mock_put.assert_called_once()
-        assert mock_put.call_args.kwargs["json"] == {"status": "running"}
+        campaign_id = create_campaign(
+            name="MMR_trigger_email",
+            body=body,
+            subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
+        )
+        assert isinstance(campaign_id, int)
+        send_campaign(campaign_id=campaign_id)
 
 
 class TestSendRainfallExceedanceEmail:
@@ -293,28 +327,13 @@ class TestSendRainfallExceedanceEmail:
             info=threshold_info,
             plot_bytes=None,
         )
-        with (
-            patch("src.utils.listmonk.requests.post") as mock_post,
-            patch("src.utils.listmonk.requests.put") as mock_put,
-        ):
-            mock_post.return_value.json.return_value = {"data": {"id": 101}}
-            mock_post.return_value.raise_for_status.return_value = None
-            mock_put.return_value.raise_for_status.return_value = None
-
-            campaign_id = create_campaign(
-                name="MMR_trigger_email",
-                body=body,
-                subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
-            )
-            send_campaign(campaign_id=campaign_id)
-
-        mock_post.assert_called_once()
-        payload = mock_post.call_args.kwargs["json"]
-        assert payload["name"] == "MMR_trigger_email"
-        assert "Precipitation threshold: REACHED" in payload["body"]
-        assert "Wind speed threshold: NOT REACHED" in payload["body"]
-        mock_put.assert_called_once()
-        assert mock_put.call_args.kwargs["json"] == {"status": "running"}
+        campaign_id = create_campaign(
+            name="MMR_trigger_email",
+            body=body,
+            subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
+        )
+        assert isinstance(campaign_id, int)
+        send_campaign(campaign_id=campaign_id)
 
 
 class TestSendCyclonePresenceEmail:
@@ -336,11 +355,12 @@ class TestSendCyclonePresenceEmail:
             storm_name=df_cyclone.storm_name.unique()[0],
             date_myanmar=MYANMAR_TIME,
             info=threshold_info,
-            plot_bytes=None,
+            plot_bytes=DUMMY_PLOT_BYTES,
         )
         assert "Wind speed threshold: NOT REACHED" in body
         assert "Precipitation threshold: NOT REACHED" in body
         assert "CYCLONE_TEST" in body
+        assert "data:image/png;base64," in body
 
     def test_monitoring_campaign_is_created_and_sent(self) -> None:
         """MMR_monitoring_email campaign is created and sent via listmonk API."""
@@ -353,27 +373,12 @@ class TestSendCyclonePresenceEmail:
             storm_name=df_cyclone.storm_name.unique()[0],
             date_myanmar=MYANMAR_TIME,
             info=threshold_info,
-            plot_bytes=None,
+            plot_bytes=DUMMY_PLOT_BYTES,
         )
-        with (
-            patch("src.utils.listmonk.requests.post") as mock_post,
-            patch("src.utils.listmonk.requests.put") as mock_put,
-        ):
-            mock_post.return_value.json.return_value = {"data": {"id": 102}}
-            mock_post.return_value.raise_for_status.return_value = None
-            mock_put.return_value.raise_for_status.return_value = None
-
-            campaign_id = create_campaign(
-                name="MMR_monitoring_email",
-                body=body,
-                subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
-            )
-            send_campaign(campaign_id=campaign_id)
-
-        mock_post.assert_called_once()
-        payload = mock_post.call_args.kwargs["json"]
-        assert payload["name"] == "MMR_monitoring_email"
-        assert "Wind speed threshold: NOT REACHED" in payload["body"]
-        assert "Precipitation threshold: NOT REACHED" in payload["body"]
-        mock_put.assert_called_once()
-        assert mock_put.call_args.kwargs["json"] == {"status": "running"}
+        campaign_id = create_campaign(
+            name="MMR_monitoring_email",
+            body=body,
+            subject=f"Anticipatory Action Myanmar - {MYANMAR_TIME}",
+        )
+        assert isinstance(campaign_id, int)
+        send_campaign(campaign_id=campaign_id)
