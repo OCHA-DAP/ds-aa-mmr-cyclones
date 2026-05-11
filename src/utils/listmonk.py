@@ -127,11 +127,11 @@ def generate_body_email(
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
     <br><br>
     """
-
+    HTML_PLOT = ""
     if plot_bytes is not None:
         for plot in plot_bytes:
             encoded = base64.b64encode(plot).decode("ascii")
-            HTML_PLOT = f"""
+            HTML_PLOT = HTML_PLOT + f"""
             <div style="text-align: center;">
                 <img src="data:image/png;base64,{encoded}" alt="Missing Plot" style="max-width: 80%; height: auto;">
             </div>
