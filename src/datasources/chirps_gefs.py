@@ -20,9 +20,9 @@ logger = get_logger(__name__)
 
 CHIRPS_GEFS_URL = (
     "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/daily_{chirps_gefs_lead_time}day/"
+    "CHIRPS-GEFS_precip_v12/"
+    "daily_{chirps_gefs_lead_time}day/"
     "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
-    "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
 )
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
 
