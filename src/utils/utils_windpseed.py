@@ -80,21 +80,22 @@ def plot_storm_track(storms_area_interest, adm_boundaries, today, hour, file_nam
     storms_area_interest_plot = storms_area_interest.to_crs(epsg=4326)
 
     # Group by sid and ensemble_number to draw lines
-    grouped = storms_area_interest_plot.groupby(['sid', 'ensemble_number'])
+    #grouped = storms_area_interest_plot.groupby(['sid', 'ensemble_number'])
+    grouped = storms_area_interest_plot.groupby(['sid'])
 
-    for (sid, ensemble_num), group in grouped:
+    for group in grouped:
         # Sort by time to ensure proper line connection
-        group = group.sort_values('time')
+        group = group[1].sort_values('time')
 
         # Extract coordinates
         lons = group.geometry.x.values
         lats = group.geometry.y.values
 
         # Plot line connecting the track points
-        ax.plot(lons, lats, color='red', linewidth=1, alpha=0.7)
+        ax.plot(lons, lats, color='red', linewidth=1, alpha=1)
 
         # Plot points
-        group.plot(ax=ax, color='red', markersize=30, alpha=0.8, zorder=5)
+        group.plot(ax=ax, color='red', markersize=30, alpha=1, zorder=4)
 
         # Add time labels to each point
         for idx, row in group.iterrows():
@@ -104,8 +105,8 @@ def plot_storm_track(storms_area_interest, adm_boundaries, today, hour, file_nam
                 xy=(row.geometry.x, row.geometry.y),
                 xytext=(5, 5),
                 textcoords='offset points',
-                fontsize=7,
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7)
+                fontsize=5,
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.5)
             )
 
     # Add labels and title
