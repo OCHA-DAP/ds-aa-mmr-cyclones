@@ -35,7 +35,7 @@ def download_tracks_cma():
     Download CMA data
     """
 
-    data = load_bob_tc_forecasts(blob_prefix="")
+    data = load_bob_tc_forecasts(blob_prefix="ds-cma-datasharing/cma_ftp/data_out/typhoon/")
 
     return data
 
