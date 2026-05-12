@@ -9,6 +9,8 @@ import xarray as xr
 from io import BytesIO
 from azure.core.exceptions import ResourceNotFoundError
 from tqdm import tqdm
+import time
+import random
 
 from src.datasources import codab
 from src.utils import constants
@@ -71,6 +73,7 @@ def download_recent_chirps_gefs(
     ):
         for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
+            time.sleep(random.uniform(2, 6))
             download_chirps_gefs(
                 issue_date,
                 valid_date,
