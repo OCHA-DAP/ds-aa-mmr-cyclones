@@ -20,9 +20,9 @@ logger = get_logger(__name__)
 
 CHIRPS_GEFS_URL = (
     "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/"
-    "daily_{chirps_gefs_lead_time}day/"
+    "CHIRPS-GEFS_precip_v12/daily_16day/"
     "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
+    "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
 )
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
 
@@ -123,6 +123,17 @@ def download_chirps_gefs(
         with open(output_tmp, "rb") as f:
             stratus.upload_blob_data(data=f, blob_name=output_filename, container_name=output_path)
 
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 403:
+            raise RuntimeError(
+                f"Access denied (403) for CHIRPS GEFS data: "
+                f"issue={issue_date.date()} valid={valid_date.date()}. "
+                f"URL may require authentication or data is restricted."
+            ) from e
+        logger.warning(
+            f"Failed to download CHIRPS GEFS data for "
+            f"{issue_date.date()} valid {valid_date.date()}: {e}"
+        )
     except Exception as e:
         logger.warning(
             f"Failed to download or process CHIRPS GEFS data for "
