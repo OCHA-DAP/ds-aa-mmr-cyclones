@@ -1,4 +1,5 @@
 import datetime
+import html.parser
 import sys
 import tempfile
 import requests
@@ -25,6 +26,67 @@ CHIRPS_GEFS_URL = (
     "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
 )
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
+CHIRPS_GEFS_DIR_URL = (
+    "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
+    "CHIRPS-GEFS_precip_v12/daily_16day/{year}/{month:02d}/"
+)
+
+
+class _DirLinkParser(html.parser.HTMLParser):
+    """Collect href values from an nginx directory listing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        if tag == "a":
+            for attr, value in attrs:
+                if attr == "href" and value is not None:
+                    self.links.append(value)
+
+
+def _fetch_available_issue_dates(
+    candidates: list[pd.Timestamp],
+) -> set[datetime.date]:
+    """Query CHIRPS-GEFS server directory listings to find available dates.
+
+    Args:
+        candidates: Issue dates to check availability for.
+
+    Returns:
+        Set of dates confirmed available on the server.
+
+    Raises:
+        RuntimeError: If the server returns 403 for any queried directory.
+    """
+    year_months = {(ts.year, ts.month) for ts in candidates}
+    available: set[datetime.date] = set()
+    for year, month in year_months:
+        url = CHIRPS_GEFS_DIR_URL.format(year=year, month=month)
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 403:
+                raise RuntimeError(
+                    f"Access denied (403) querying directory: {url}"
+                ) from e
+            logger.warning(f"Could not fetch directory listing {url}: {e}")
+            continue
+
+        parser = _DirLinkParser()
+        parser.feed(response.text)
+        for link in parser.links:
+            # Directory entries are "DD/" (two-digit day)
+            stripped = link.rstrip("/")
+            if stripped.isdigit() and len(stripped) == 2:
+                available.add(datetime.date(year, month, int(stripped)))
+
+    return available
+
 
 def download_recent_chirps_gefs(
     date: datetime.date | None = None,
@@ -62,8 +124,14 @@ def download_recent_chirps_gefs(
     download_dates = [
         d for d in issue_date_range if d not in existing_issue_dates
     ]
+
+    available_on_server = _fetch_available_issue_dates(download_dates)
+    download_dates = [
+        d for d in download_dates if d.date() in available_on_server
+    ]
     logger.info(
-        f"Downloading {len(download_dates)} new issue dates for {date.year}: "
+        f"Downloading {len(download_dates)} new issue dates for {date.year} "
+        f"(after server availability check): "
         f"{[str(x.date()) for x in download_dates]}"
     )
 
