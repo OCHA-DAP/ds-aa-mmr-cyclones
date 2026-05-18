@@ -93,7 +93,7 @@ def build_signals_text() -> tuple[str, int]:
     else:
         lines.append(f":large_green_circle: Wind threshold not exceeded ({constants.wind_speed_alert_level} kt)")
 
-    rainfall_blobs = _latest_blob_today("rainfall_")
+    rainfall_blobs = _latest_blob_today("rainfall_exceedance")
     if rainfall_blobs:
         n_alerts += 1
         lines.append(":rotating_light: *Rainfall threshold exceeded*")
