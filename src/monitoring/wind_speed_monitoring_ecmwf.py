@@ -202,9 +202,10 @@ def main():
                 container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
             logger.info("Monitoring data uploaded to blob storage.")
+            storms_area_interest_plot = storms_area_interest.loc[storms_area_interest["wind_speed_at_land"] >= 30, :]
 
             # Generate and upload plot
-            plot_storm_track(storms_area_interest, adm_boundaries, today, hour)
+            plot_storm_track(storms_area_interest_plot, adm_boundaries, today, hour)
 
         # --- WIND STORMS ---
         if not wind_storms.empty:

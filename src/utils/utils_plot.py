@@ -552,7 +552,7 @@ def plot_chirps_gefs_forecast(
     plt.close()
 
     if file_name is None:
-        file_name = f"rainfall_forecast_plot_{today}.png"
+        file_name = f"rainfall_forecast_plot_{today}_.png"
     if save:
         stratus.upload_blob_data(
             data=buf,
