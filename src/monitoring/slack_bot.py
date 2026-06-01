@@ -21,6 +21,7 @@ GITHUB_REPO = os.getenv("GITHUB_REPO", "ocha-dap/ds-aa-mmr-cyclones")
 WORKFLOWS = [
     "run_monitoring.yml",
     "run_update_ecmwf.yml",
+    "run_update_cma.yml",
     "run_update_chirps_gefs.yml",
 ]
 

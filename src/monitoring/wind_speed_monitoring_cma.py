@@ -10,15 +10,11 @@ from src.utils.utils_windpseed import compute_distance_to_land, compute_wind_spe
 from src.utils.logging import get_logger
 from src.datasources import codab
 import src.utils.constants as constants
-from src.utils.utils_cma import load_bob_tc_forecasts
+from src.utils.utils_cma import load_typhoon_tc_forecasts
 import geopandas as gpd
-import matplotlib.pyplot as plt
 
 load_dotenv()
 logger = get_logger(__name__)
-
-from climada_petals.hazard.tc_tracks_forecast import TCForecast
-from climada.hazard.centroids import Centroids
 
 # ----------------------------------------------------
 # PARAMETERS
@@ -30,100 +26,66 @@ WIND_THRESHOLD = constants.wind_speed_alert_level # wind speed threshold (knots)
 # DOWNLOAD CYCLONE FORECAST TRACKS
 # ----------------------------------------------------
 
-def download_tracks_cma():
-    """
-    Download CMA data
-    """
+def download_tracks_cma() -> pd.DataFrame:
+    """Download and normalise CMA typhoon forecast data.
 
-    data = load_bob_tc_forecasts(blob_prefix="ds-cma-datasharing/cma_ftp/data_out/typhoon/")
-
-    return data
+    Returns:
+        DataFrame with columns renamed to match the shared processing
+        utilities: ``sid``, ``time``, ``max_sustained_wind``,
+        ``ensemble_number``, ``storm_name``, ``lon``, ``lat``.
+    """
+    df = load_typhoon_tc_forecasts(
+        blob_prefix="ds-cma-datasharing/cma_ftp/data_out/typhoon/"
+    )
+    df = df.rename(
+        columns={
+            "storm_id": "sid",
+            "valid_datetime": "time",
+            "wind_speed_ms": "max_sustained_wind",
+        }
+    )
+    df["ensemble_number"] = 0
+    return df
 
 
 # ----------------------------------------------------
 # FILTER CYCLONES NEAR MYANMAR
 # ----------------------------------------------------
 
-def filter_myanmar_tracks(tracks, buffer_km=200):
-    """
-    Keep only storms that pass near Myanmar (buffered area).
-    """
+def filter_myanmar_tracks(tracks: pd.DataFrame, buffer_km: int = 200) -> gpd.GeoDataFrame:
+    """Keep only storms that pass near Myanmar (buffered area).
 
-    # --- Load and buffer Myanmar ---
+    Args:
+        tracks: DataFrame returned by ``download_tracks_cma`` with columns
+            ``lon``, ``lat``, ``sid``, ``time``, ``max_sustained_wind``,
+            ``ensemble_number``, and ``storm_name``.
+        buffer_km: Buffer distance in kilometres around Myanmar.
+
+    Returns:
+        GeoDataFrame of track points within the buffered Myanmar boundary.
+    """
     adm0 = codab.load_codab_from_blob(admin_level=0)
-
     gdf_adm_projected = adm0.to_crs(epsg=constants.MMR_UTM)
-
     gdf_adm_projected["geometry"] = gdf_adm_projected.geometry.buffer(
-        buffer_km* 1000
+        buffer_km * 1000
     )
-
     gdf_adm_buffered = gdf_adm_projected.to_crs(epsg=4326)
 
-    # --- Convert tracks to GeoDataFrame ---
-    dfs = []
-
-    for i, track in enumerate(tracks):
-
-        df = track.to_dataframe().reset_index()
-
-        df["storm_name"] = track.name
-        df["sid"] = track.sid
-        df["ensemble_number"] = track.ensemble_number
-        df["is_ensemble"] = track.is_ensemble
-        df["category"] = track.attrs.get("category", "N/A")
-
-        dfs.append(df)
-
-    gdf_all = pd.concat(dfs, ignore_index=True)
-
     gdf_all = gpd.GeoDataFrame(
-        gdf_all,
-        geometry=gpd.points_from_xy(gdf_all.lon, gdf_all.lat),
-        crs="EPSG:4326"
+        tracks,
+        geometry=gpd.points_from_xy(tracks.lon, tracks.lat),
+        crs="EPSG:4326",
     )
 
-    # --- Spatial filter (points within buffer) ---
     gdf_filtered = gpd.sjoin(
         gdf_all,
         gdf_adm_buffered,
         how="inner",
-        predicate="within"
+        predicate="within",
     ).drop(columns="index_right")
 
     return gdf_filtered
 
-
-# ----------------------------------------------------
-# PROCESS STORM
-# ----------------------------------------------------
-def track_to_gdf(track):
-    """
-    Convert CLIMADA track to GeoDataFrame
-    """
-
-    df = track.to_dataframe().reset_index()
-
-    gdf = gpd.GeoDataFrame(
-        df,
-        geometry=gpd.points_from_xy(df.lon, df.lat),
-        crs="EPSG:4326"
-    )
-
-    return gdf
-
-def process_storm(track, gdf_land):
-
-    # convert track
-    gdf_track = track_to_gdf(track)
-
-    # distance to land
-    gdf_track = compute_distance_to_land(gdf_track, gdf_land)
-
-    # compute reduced wind
-    gdf_track = compute_wind_speed_at_land(gdf_track)
-
-    return gdf_track
 
 # ----------------------------------------------------
 # MAIN WORKFLOW
