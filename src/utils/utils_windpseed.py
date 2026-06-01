@@ -60,68 +60,78 @@ def compute_distance_to_land(gdf_track, gdf_land):
 # PLOT STORM TRACK
 # ----------------------------------------------------
 
-def plot_storm_track(storms_area_interest, adm_boundaries, today, hour, file_name:str=None):
-    """
-    Create a plot showing Myanmar boundaries, highlighted Rakhine state,
-    storm track with lines connecting same ensemble/sid, and time labels.
-    """
+def plot_storm_track(
+    storms_area_interest: gpd.GeoDataFrame,
+    adm_boundaries: gpd.GeoDataFrame,
+    today: str,
+    hour: str,
+    file_name: str | None = None,
+) -> str:
+    """Create a plot showing Myanmar boundaries and storm tracks by sid.
 
+    The track with the highest maximum wind speed at land is highlighted in
+    red; all other tracks are drawn in green.
+
+    Args:
+        storms_area_interest: GeoDataFrame with storm track points. Must
+            contain columns ``sid``, ``time``, ``wind_speed_at_land``, and a
+            point geometry.
+        adm_boundaries: GeoDataFrame of administrative boundaries. Must
+            contain an ``ADM1_EN`` column.
+        today: Date string used in the default blob filename.
+        hour: Hour string used in the default blob filename.
+        file_name: Optional override for the uploaded blob filename.
+
+    Returns:
+        The blob filename under which the plot was uploaded.
+    """
     fig, ax = plt.subplots(figsize=(14, 12))
 
-    # Plot all Myanmar boundaries
-    adm_boundaries.boundary.plot(ax=ax, color='black', linewidth=1.5)
+    adm_boundaries.boundary.plot(ax=ax, color="black", linewidth=1.5)
 
-    # Highlight Rakhine state
-    rakhine = adm_boundaries[adm_boundaries['ADM1_EN'] == 'Rakhine']
+    rakhine = adm_boundaries[adm_boundaries["ADM1_EN"] == "Rakhine"]
     if not rakhine.empty:
-        rakhine.plot(ax=ax, color='lightblue', alpha=0.5, edgecolor='gray', linewidth=1.5)
+        rakhine.plot(
+            ax=ax, color="lightblue", alpha=0.5, edgecolor="gray", linewidth=1.5
+        )
 
-    # Convert storm data to EPSG:4326
-    storms_area_interest_plot = storms_area_interest.to_crs(epsg=4326)
+    storms_plot = storms_area_interest.to_crs(epsg=4326)
 
-    # Group by sid and ensemble_number to draw lines
-    #grouped = storms_area_interest_plot.groupby(['sid', 'ensemble_number'])
-    grouped = storms_area_interest_plot.groupby(['sid'])
+    max_wind_sid = (
+        storms_plot.groupby("sid")["wind_speed_at_land"].max().idxmax()
+    )
 
-    for group in grouped:
-        # Sort by time to ensure proper line connection
-        group = group[1].sort_values('time')
+    for sid, group in storms_plot.groupby("sid"):
+        group = group.sort_values("time")
+        color = "red" if sid == max_wind_sid else "green"
 
-        # Extract coordinates
         lons = group.geometry.x.values
         lats = group.geometry.y.values
 
-        # Plot line connecting the track points
-        ax.plot(lons, lats, color='red', linewidth=1, alpha=1)
+        ax.plot(lons, lats, color=color, linewidth=1, alpha=1)
+        group.plot(ax=ax, color=color, markersize=30, alpha=1, zorder=4)
 
-        # Plot points
-        group.plot(ax=ax, color='red', markersize=30, alpha=1, zorder=4)
-
-        # Add time labels to each point
-        for idx, row in group.iterrows():
-            time_str = pd.to_datetime(row['time']).strftime('%m-%d %H')
+        for _, row in group.iterrows():
+            time_str = pd.to_datetime(row["time"]).strftime("%m-%d %H")
             ax.annotate(
                 time_str,
                 xy=(row.geometry.x, row.geometry.y),
                 xytext=(5, 5),
-                textcoords='offset points',
+                textcoords="offset points",
                 fontsize=5,
-                bbox=dict(boxstyle='round,pad=0.2', facecolor='yellow', alpha=0.5)
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="yellow", alpha=0.5),
             )
 
-    # Add labels and title
-    ax.set_xlabel('Longitude', fontsize=12)
-    ax.set_ylabel('Latitude', fontsize=12)
-    ax.set_title('Cyclone Track over Myanmar', fontsize=14, fontweight='bold')
+    ax.set_xlabel("Longitude", fontsize=12)
+    ax.set_ylabel("Latitude", fontsize=12)
+    ax.set_title("Cyclone Track over Myanmar", fontsize=14, fontweight="bold")
     ax.grid(True, alpha=0.3)
 
-    # Save plot to bytes buffer
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    plt.savefig(buf, format="png", dpi=150, bbox_inches="tight")
     buf.seek(0)
     plt.close()
 
-    # Upload to blob storage
     if file_name is None:
         file_name = f"storm_track_plot_{today}_{hour}.png"
     stratus.upload_blob_data(
