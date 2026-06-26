@@ -100,11 +100,31 @@ def send_transactional(
     r.raise_for_status()
     return r.json()
 
+_PHASE_INTROS: Dict[str, str] = {
+    "readiness": (
+        "The <strong>readiness threshold</strong> has been reached for Cyclone {storm_name}. "
+        "The forecast indicates landfall in approximately 3&ndash;5 days. "
+        "Readiness activities in line with the anticipatory action framework should now commence."
+    ),
+    "action": (
+        "The <strong>action threshold</strong> has been reached for Cyclone {storm_name}. "
+        "The forecast indicates landfall in approximately 48&ndash;72 hours. "
+        "All anticipatory actions in line with the framework should now commence."
+    ),
+    "observational": (
+        "Cyclone {storm_name} is now in the <strong>observational phase</strong>. "
+        "Landfall is forecast within 48 hours. "
+        "The situation is being closely monitored."
+    ),
+}
+
+
 def generate_body_email(
     storm_name,
     date_myanmar,
     info: Dict = None,
     plot_bytes: List[bytes] | None = None,
+    phase: str | None = None,
 ):
     """Generate HTML email body for cyclone monitoring/trigger emails.
 
@@ -114,15 +134,31 @@ def generate_body_email(
         info: Dict with keys 'wind_speed_threshold_reached' and
             'rainfall_threshold_reached'.
         plot_bytes: list of Raw PNG bytes of the needed plot, or None.
+        phase: Trigger phase - 'readiness', 'action', 'observational', or
+            None for a generic monitoring email.
 
     Returns:
         HTML string for the email body.
     """
+    if phase in _PHASE_INTROS:
+        phase_text = _PHASE_INTROS[phase].format(storm_name=storm_name)
+        intro_body = (
+            f"{phase_text}<br><br>"
+            f"Dear colleagues,<br>"
+            f"Please find more information below.<br>"
+        )
+    else:
+        intro_body = (
+            "Dear colleagues,<br>"
+            "A new forecast track has been released by ECMWF (European Centre for "
+            "Medium-Range Weather Forecasts). Also included is the forecasted "
+            "precipitation from CHIRPS-GEFS.<br>"
+            "Please find more information below.<br>"
+        )
+
     HTML_INTRO = f"""
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
-    Dear colleagues,<br>
-    A new forecast track has been released by ECMWF (European Centre for Medium-Range Weather Forecasts). Also included is the forecasted precipitation from CHIRPS-GEFS.<br>
-    Please find more information below.<br>
+    {intro_body}
     Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
     <br><br>
