@@ -4,48 +4,26 @@ Run from the repo root:
     python tests/test_images/generate_storm_track_test_image.py
 
 The output is saved to tests/test_images/storm_track_with_neighbours.png.
-This script uses synthetic storm data and Natural Earth boundaries so it
-requires no blob storage access.
+Requires blob storage access to load CODAB admin boundaries.
 """
 
 import pathlib
 import sys
 
-import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import pandas as pd
+from dotenv import load_dotenv
 from shapely.geometry import Point
+
+load_dotenv()
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[2]))
 
-from src.utils.utils_windpseed import (  # noqa: E402
-    _MYANMAR_NEIGHBOURS,
-    _PLOT_BBOX,
-    _load_neighbour_countries,
-    plot_storm_track,
-)
+from src.datasources import codab  # noqa: E402
+from src.utils import constants  # noqa: E402
+from src.utils.utils_windpseed import plot_storm_track  # noqa: E402
 
 OUTPUT_PATH = pathlib.Path(__file__).parent / "storm_track_with_neighbours.png"
-
-
-def _make_myanmar_boundaries() -> gpd.GeoDataFrame:
-    """Load Myanmar admin-1 boundaries from Natural Earth.
-
-    Uses Natural Earth 10m states/provinces data to get individual Myanmar
-    states and regions. The ``ADM1_EN`` column is populated from the Natural
-    Earth ``name`` field so that only the Rakhine polygon is highlighted by
-    ``plot_storm_track``.
-
-    Returns:
-        GeoDataFrame of Myanmar admin-1 units with an ``ADM1_EN`` column.
-    """
-    shp_path = shpreader.natural_earth(
-        resolution="10m", category="cultural", name="admin_1_states_provinces"
-    )
-    adm1 = gpd.read_file(shp_path)
-    mmr_adm1 = adm1[adm1["admin"] == "Myanmar"].copy()
-    mmr_adm1["ADM1_EN"] = mmr_adm1["name"]
-    return mmr_adm1.reset_index(drop=True)
 
 
 def _make_mock_storms() -> gpd.GeoDataFrame:
@@ -84,7 +62,7 @@ def _make_mock_storms() -> gpd.GeoDataFrame:
 
 def main() -> None:
     """Generate and save the test image."""
-    adm_boundaries = _make_myanmar_boundaries()
+    adm_boundaries = codab.load_codab_from_blob(admin_level=constants.adm_level)
     storms = _make_mock_storms()
 
     # Monkey-patch upload so it is a no-op during local test image generation.
