@@ -1,15 +1,16 @@
+import cartopy.io.shapereader as shpreader
 from dotenv import load_dotenv
 import numpy as np
 import io
 
+import geopandas as gpd
+import matplotlib.pyplot as plt
 import pandas as pd
 import ocha_stratus as stratus
 from src.utils.utils_fun import from_ms_to_knots, convert_10m_wind_to_3m
 from src.utils.logging import get_logger
 from src.datasources import codab
 import src.utils.constants as constants
-import geopandas as gpd
-import matplotlib.pyplot as plt
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -87,12 +88,19 @@ def plot_storm_track(
     """
     fig, ax = plt.subplots(figsize=(14, 12))
 
-    adm_boundaries.boundary.plot(ax=ax, color="black", linewidth=1.5)
+    world_shp = shpreader.natural_earth(
+        resolution="50m", category="cultural", name="admin_0_countries"
+    )
+    world = gpd.read_file(world_shp)
+    world.plot(ax=ax, color="#f0f0f0", edgecolor="#aaaaaa", linewidth=0.5, zorder=0)
+
+    adm_boundaries.boundary.plot(ax=ax, color="black", linewidth=1.5, zorder=1)
 
     rakhine = adm_boundaries[adm_boundaries["ADM1_EN"] == "Rakhine"]
     if not rakhine.empty:
         rakhine.plot(
-            ax=ax, color="lightblue", alpha=0.5, edgecolor="gray", linewidth=1.5
+            ax=ax, color="lightblue", alpha=0.5, edgecolor="gray", linewidth=1.5,
+            zorder=2,
         )
 
     storms_plot = storms_area_interest.to_crs(epsg=4326)
@@ -108,7 +116,7 @@ def plot_storm_track(
         lons = group.geometry.x.values
         lats = group.geometry.y.values
 
-        ax.plot(lons, lats, color=color, linewidth=1, alpha=1)
+        ax.plot(lons, lats, color=color, linewidth=1, alpha=1, zorder=3)
         group.plot(ax=ax, color=color, markersize=30, alpha=1, zorder=4)
 
         for _, row in group.iterrows():
@@ -121,6 +129,11 @@ def plot_storm_track(
                 fontsize=5,
                 bbox=dict(boxstyle="round,pad=0.2", facecolor="yellow", alpha=0.5),
             )
+
+    bounds = adm_boundaries.total_bounds  # [minx, miny, maxx, maxy]
+    margin = 5
+    ax.set_xlim(bounds[0] - margin, bounds[2] + margin)
+    ax.set_ylim(bounds[1] - margin, bounds[3] + margin)
 
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
