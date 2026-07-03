@@ -491,10 +491,10 @@ def plot_chirps_gefs_forecast(
 
     x_pos = range(len(df_plot))
     bar_width = 0.6
-    colors = ["#8ecae6", "#f4a261", "#a0522d"]
+    colors = ["#c6dbef", "#6baed6", "#2171b5"]
     date_labels = pd.to_datetime(df_plot["valid_date"]).dt.strftime("%Y-%m-%d")
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(14, 8))
 
     ax.bar(x_pos, df_plot["contrib_d2"], bar_width, color=colors[0], label="Day t+2")
     ax.bar(
@@ -537,13 +537,16 @@ def plot_chirps_gefs_forecast(
 
     ax.set_xticks(list(x_pos))
     ax.set_xticklabels(date_labels, rotation=45, ha="right", fontsize=8)
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Total precipitation over 3 days (mm) - forecasted")
+    ax.set_xlabel("Date", fontsize=12)
+    ax.set_ylabel("Total precipitation over 3 days (mm) - forecasted", fontsize=12)
     ax.set_title(
         f"Total precipitation forecasted over 3 days, for Rakhine\n"
-        f"(issued: {pd.Timestamp(latest_issue).strftime('%Y-%m-%d')})"
+        f"(issued: {pd.Timestamp(latest_issue).strftime('%Y-%m-%d')})",
+        fontsize=14,
+        fontweight="bold",
     )
     ax.legend(title="Date", loc="upper left")
+    ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
     buf = io.BytesIO()

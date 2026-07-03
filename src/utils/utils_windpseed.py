@@ -1,3 +1,4 @@
+import cartopy.io.shapereader as shpreader
 from dotenv import load_dotenv
 import numpy as np
 import io
@@ -144,10 +145,10 @@ def plot_storm_track(
     if not rakhine.empty:
         rakhine.plot(
             ax=ax,
-            color="lightblue",
-            alpha=0.5,
-            edgecolor="gray",
-            linewidth=1.5,
+            color="#4682b4",
+            alpha=0.6,
+            edgecolor="black",
+            linewidth=0.8,
             zorder=2,
         )
 
@@ -180,9 +181,11 @@ def plot_storm_track(
                 zorder=5,
             )
 
-    lon_min, lon_max, lat_min, lat_max = _PLOT_BBOX
-    ax.set_xlim(lon_min, lon_max)
-    ax.set_ylim(lat_min, lat_max)
+    bounds = adm_boundaries.total_bounds  # [minx, miny, maxx, maxy]
+    margin = 5
+    ax.set_xlim(bounds[0] - margin, bounds[2] + margin)
+    ax.set_ylim(bounds[1] - margin, bounds[3] + margin)
+
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
     ax.set_title("Cyclone Track over Myanmar", fontsize=14, fontweight="bold")
