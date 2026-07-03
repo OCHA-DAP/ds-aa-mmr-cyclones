@@ -50,7 +50,7 @@ def _dummy_storm_gdf() -> GeoDataFrame:
         GeoDataFrame in EPSG:4326 with columns ``sid``, ``storm_name``,
         ``time``, ``wind_speed_at_land``, and a Point geometry.
     """
-    timestamps = pd.date_range("2026-04-03 00:00", periods=8, freq="6h")
+    timestamps = pd.date_range("2026-06-29 00:00", periods=8, freq="6h")
 
     # Track A: high wind, approaches Rakhine coast directly (~93E, 21N)
     lons_a = np.linspace(88.0, 93.0, 8)
@@ -96,7 +96,7 @@ def _dummy_rainfall_df(above_threshold: bool) -> pd.DataFrame:
     Returns:
         DataFrame with 'issue_date', 'valid_date', and 'mean' columns.
     """
-    issue_date = pd.Timestamp("2026-03-25")
+    issue_date = pd.Timestamp("2026-06-29")
     mean_value = 65.0 if above_threshold else 10.0
     return pd.DataFrame(
         [
