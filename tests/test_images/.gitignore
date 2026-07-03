@@ -1,0 +1,2 @@
+# Allow PNG test images in this directory.
+!*.png
