@@ -94,12 +94,18 @@ def plot_storm_track(
     world = gpd.read_file(world_shp)
     world.plot(ax=ax, color="#f0f0f0", edgecolor="#aaaaaa", linewidth=0.5, zorder=0)
 
-    adm_boundaries.boundary.plot(ax=ax, color="black", linewidth=1.5, zorder=1)
+    adm_boundaries.plot(
+        ax=ax, color="lightblue", alpha=0.5, edgecolor="black", linewidth=0.8, zorder=1
+    )
 
     rakhine = adm_boundaries[adm_boundaries["ADM1_EN"] == "Rakhine"]
     if not rakhine.empty:
         rakhine.plot(
-            ax=ax, color="lightblue", alpha=0.5, edgecolor="gray", linewidth=1.5,
+            ax=ax,
+            color="#4682b4",
+            alpha=0.6,
+            edgecolor="black",
+            linewidth=0.8,
             zorder=2,
         )
 

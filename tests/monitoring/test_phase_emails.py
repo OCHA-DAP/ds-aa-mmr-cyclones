@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 import ocha_stratus as stratus
@@ -14,6 +15,7 @@ from src.utils.utils_plot import plot_chirps_gefs_forecast
 load_dotenv()
 
 _MYANMAR_TIME = "12h00 01 Jul. 2026"
+_STORM_NAME = "TEST CYCLONE"
 
 _PHASE_THRESHOLD_INFO: dict[str | None, dict[str, str]] = {
     None: {
@@ -33,6 +35,54 @@ _PHASE_THRESHOLD_INFO: dict[str | None, dict[str, str]] = {
         "rainfall_threshold_reached": "REACHED",
     },
 }
+
+
+def _dummy_storm_gdf() -> GeoDataFrame:
+    """Build a synthetic two-track GeoDataFrame with points near Rakhine.
+
+    Creates two storm tracks approaching the Rakhine coast from the Bay of
+    Bengal. Track A has the higher wind speed (will be coloured red) and Track
+    B has the lower wind speed (will be coloured green). Both tracks are within
+    the visible axes extent around Myanmar so that the points appear in the
+    plot.
+
+    Returns:
+        GeoDataFrame in EPSG:4326 with columns ``sid``, ``storm_name``,
+        ``time``, ``wind_speed_at_land``, and a Point geometry.
+    """
+    timestamps = pd.date_range("2026-04-03 00:00", periods=8, freq="6h")
+
+    # Track A: high wind, approaches Rakhine coast directly (~93E, 21N)
+    lons_a = np.linspace(88.0, 93.0, 8)
+    lats_a = np.linspace(14.0, 21.0, 8)
+    wind_a = np.linspace(55.0, 50.0, 8)
+
+    # Track B: lower wind, parallel track slightly south
+    lons_b = np.linspace(88.5, 93.5, 8)
+    lats_b = np.linspace(11.0, 18.0, 8)
+    wind_b = np.linspace(35.0, 30.0, 8)
+
+    records = [
+        {
+            "sid": "SID_A",
+            "storm_name": _STORM_NAME,
+            "time": t,
+            "wind_speed_at_land": w,
+            "geometry": Point(lon, lat),
+        }
+        for t, lon, lat, w in zip(timestamps, lons_a, lats_a, wind_a)
+    ] + [
+        {
+            "sid": "SID_B",
+            "storm_name": _STORM_NAME,
+            "time": t,
+            "wind_speed_at_land": w,
+            "geometry": Point(lon, lat),
+        }
+        for t, lon, lat, w in zip(timestamps, lons_b, lats_b, wind_b)
+    ]
+
+    return GeoDataFrame(records, geometry="geometry", crs="EPSG:4326")
 
 
 def _dummy_rainfall_df(above_threshold: bool) -> pd.DataFrame:
@@ -64,20 +114,16 @@ def _dummy_rainfall_df(above_threshold: bool) -> pd.DataFrame:
 def test_plots() -> tuple[str, bytes, bytes, bytes]:
     """Generate test plots once for all phase email tests.
 
-    Uploads the storm track plot and two rainfall forecast plots (one below
-    and one above the alert threshold) to blob storage, then returns the
-    storm name and the raw PNG bytes for each.
+    Builds a synthetic two-track GeoDataFrame near Rakhine and uploads the
+    storm track plot plus two rainfall forecast plots (one below and one above
+    the 175 mm alert threshold) to blob storage.
 
     Returns:
         Tuple of (storm_name, storm_track_bytes, rainfall_low_bytes,
         rainfall_high_bytes) where rainfall_high_bytes contains at least one
         bar above the 175 mm threshold.
     """
-    df = stratus.load_csv_from_blob(
-        blob_name=f"{constants.PROJECT_PREFIX}/processed/test_monitoring.csv"
-    )
-    geometry = [Point(xy) for xy in zip(df.lon, df.lat)]
-    gdf = GeoDataFrame(df, geometry=geometry, crs="EPSG:4326")
+    gdf = _dummy_storm_gdf()
     adm_boundaries = codab.load_codab_from_blob(admin_level=constants.adm_level)
 
     plot_storm_track(
@@ -113,8 +159,7 @@ def test_plots() -> tuple[str, bytes, bytes, bytes]:
         )
     )
 
-    storm_name = gdf["storm_name"].iloc[0]
-    return storm_name, storm_track_bytes, rainfall_low_bytes, rainfall_high_bytes
+    return _STORM_NAME, storm_track_bytes, rainfall_low_bytes, rainfall_high_bytes
 
 
 @pytest.mark.parametrize("phase", [None, "readiness", "action", "observational"])
