@@ -29,20 +29,23 @@ OUTPUT_PATH = pathlib.Path(__file__).parent / "storm_track_with_neighbours.png"
 
 
 def _make_myanmar_boundaries() -> gpd.GeoDataFrame:
-    """Load Myanmar admin-0 boundary from Natural Earth as a mock adm1 GDF.
+    """Load Myanmar admin-1 boundaries from Natural Earth.
+
+    Uses Natural Earth 10m states/provinces data to get individual Myanmar
+    states and regions. The ``ADM1_EN`` column is populated from the Natural
+    Earth ``name`` field so that only the Rakhine polygon is highlighted by
+    ``plot_storm_track``.
 
     Returns:
-        GeoDataFrame with a single row representing Myanmar, with an ``ADM1_EN``
-        column set to ``"Rakhine"`` so the highlight branch in ``plot_storm_track``
-        is exercised.
+        GeoDataFrame of Myanmar admin-1 units with an ``ADM1_EN`` column.
     """
     shp_path = shpreader.natural_earth(
-        resolution="50m", category="cultural", name="admin_0_countries"
+        resolution="10m", category="cultural", name="admin_1_states_provinces"
     )
-    world = gpd.read_file(shp_path)
-    mmr = world[world["NAME"] == "Myanmar"].copy()
-    mmr["ADM1_EN"] = "Rakhine"
-    return mmr.reset_index(drop=True)
+    adm1 = gpd.read_file(shp_path)
+    mmr_adm1 = adm1[adm1["admin"] == "Myanmar"].copy()
+    mmr_adm1["ADM1_EN"] = mmr_adm1["name"]
+    return mmr_adm1.reset_index(drop=True)
 
 
 def _make_mock_storms() -> gpd.GeoDataFrame:
