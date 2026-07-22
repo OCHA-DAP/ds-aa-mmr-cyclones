@@ -154,9 +154,8 @@ def main():
 
             stratus.upload_csv_to_blob(
                 df=storms_area_interest,
-                blob_name=file_name,
+                blob_name=f"{constants.PROJECT_PREFIX}/processed/{file_name}",
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
             logger.info("Monitoring data uploaded to blob storage.")
 
@@ -170,9 +169,8 @@ def main():
 
             stratus.upload_csv_to_blob(
                 df=wind_storms,
-                blob_name=file_name,
+                blob_name=f"{constants.PROJECT_PREFIX}/processed/{file_name}",
                 stage="dev",
-                container_name=f"projects/{constants.PROJECT_PREFIX}/processed",
             )
             logger.info("Data exceeding the wind speed threshold uploaded to blob storage.")
 

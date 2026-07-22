@@ -559,11 +559,11 @@ def plot_chirps_gefs_forecast(
     if save:
         stratus.upload_blob_data(
             data=buf,
-            blob_name=file_name,
-            stage="dev",
-            container_name=(
-                f"projects/{constants.PROJECT_PREFIX}/processed/rainfall_forecast_plot"
+            blob_name=(
+                f"{constants.PROJECT_PREFIX}/processed/rainfall_forecast_plot/"
+                f"{file_name}"
             ),
+            stage="dev",
         )
         logger.info(f"Rainfall forecast plot uploaded to blob storage: {file_name}")
 

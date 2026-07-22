@@ -35,7 +35,7 @@ _FORECAST_ROW_RE = re.compile(
 _MOTION_RE = re.compile(r"MOVE\s+([A-Z]+)\s+([\d.]+)KM/H", re.IGNORECASE)
 
 
-def _infer_bulletin_datetime(day: int, hour: int) -> pd.Timestamp:
+def _infer_bulletin_datetime(day: int, hour: int) -> pd.Timestamp | None:
     """Infer full UTC datetime from bulletin day/hour, assuming recent data.
 
     Uses the current UTC month/year, rolling back one month if the resulting
@@ -46,7 +46,8 @@ def _infer_bulletin_datetime(day: int, hour: int) -> pd.Timestamp:
         hour: Hour (UTC) from the bulletin header.
 
     Returns:
-        Timezone-naive UTC Timestamp.
+        Timezone-naive UTC Timestamp, or None if day/hour is not a valid
+        date in either the current or previous month (malformed bulletin).
     """
     now = pd.Timestamp.now(tz="UTC").replace(tzinfo=None)
     try:
@@ -55,7 +56,10 @@ def _infer_bulletin_datetime(day: int, hour: int) -> pd.Timestamp:
         dt = None
     if dt is None or dt > now + pd.Timedelta(days=2):
         prev = now.replace(day=1) - pd.Timedelta(days=1)
-        dt = pd.Timestamp(year=prev.year, month=prev.month, day=day, hour=hour)
+        try:
+            dt = pd.Timestamp(year=prev.year, month=prev.month, day=day, hour=hour)
+        except ValueError:
+            return None
     return dt
 
 
