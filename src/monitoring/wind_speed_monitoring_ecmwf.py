@@ -2,12 +2,21 @@
 Simple cyclone monitoring script
 Checks if forecast wind speeds exceed 47 knots over Myanmar
 """
+import logging
+
 from dotenv import load_dotenv
 import numpy as np
 import io
 
 import pandas as pd
 import ocha_stratus as stratus
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 from src.utils.utils_windpseed import compute_distance_to_land, compute_wind_speed_at_land, plot_storm_track
 from src.utils.logging import get_logger
 from src.datasources import codab
@@ -31,9 +40,20 @@ WIND_THRESHOLD = constants.wind_speed_alert_level # wind speed threshold (knots)
 # DOWNLOAD CYCLONE FORECAST TRACKS
 # ----------------------------------------------------
 
+@retry(
+    retry=retry_if_exception_type((TimeoutError, OSError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=5, max=30),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 def download_tracks_ecmwf():
     """
     Download ECMWF tropical cyclone forecasts.
+
+    Retries up to 3 times with exponential backoff on transient FTP
+    timeouts, since ECMWF's dissemination FTP server occasionally drops
+    connections under load.
     """
 
     # download BUFR files from ECMWF
