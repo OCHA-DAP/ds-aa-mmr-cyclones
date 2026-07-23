@@ -205,9 +205,8 @@ def plot_storm_track(
         file_name = f"storm_track_plot_{today}_{hour}.png"
     stratus.upload_blob_data(
         data=buf,
-        blob_name=file_name,
+        blob_name=f"{constants.PROJECT_PREFIX}/processed/storm_track_plot/{file_name}",
         stage="dev",
-        container_name=f"projects/{constants.PROJECT_PREFIX}/processed/storm_track_plot",
     )
     logger.info(f"Storm track plot uploaded to blob storage: {file_name}")
 
