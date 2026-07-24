@@ -12,48 +12,50 @@ from src.utils.logging import get_logger
 load_dotenv()
 logger = get_logger(__name__)
 
+def _todays_blobs(prefix: str) -> list[str]:
+    """Return blobs under processed/{prefix} whose name contains today's date.
+
+    Blobs are never deleted, so listing without a date filter would pick up
+    stale data from a past run (or leftover test fixtures) instead of
+    today's. Sorted so the caller can take the last entry as a tie-break
+    when more than one blob matches today (e.g. two runs the same day).
+    """
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    blobs = stratus.list_container_blobs(
+        name_starts_with=f"{constants.PROJECT_PREFIX}/processed/{prefix}"
+    )
+    return sorted(b for b in blobs if today in b)
+
+
 def check_wind_speed_trigger_data():
-    xx = stratus.list_container_blobs(name_starts_with=f"{constants.PROJECT_PREFIX}/processed/wind")
-    if len(xx) == 0:
+    xx = _todays_blobs("wind")
+    if not xx:
         logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
         return pd.DataFrame(None)
 
-    else:
+    df = stratus.load_csv_from_blob(blob_name=xx[-1])
+    has_valid_sid = (~df["sid"].astype(str).str.match(r"^\d{2}B$", na=False)).any()
+    if has_valid_sid:
         logger.info(f"Wind speed threshold reached for {constants.PROJECT_PREFIX}")
-        xx.sort()
-        df = stratus.load_csv_from_blob(blob_name=xx[-1])
-        has_valid_sid = (~df["sid"].astype(str).str.match(r"^\d{2}B$", na=False)).any()
-        if has_valid_sid:
-            return df
-        else:
-            return pd.DataFrame(None)
+        return df
+    logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
+    return pd.DataFrame(None)
 
 def check_rainfall_data():
-    xx = stratus.list_container_blobs(name_starts_with=f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance")
-    if len(xx) == 0:
+    xx = _todays_blobs("rainfall_exceedance")
+    if not xx:
         logger.info(f"Rainfall threshold not reached {constants.PROJECT_PREFIX}")
         return pd.DataFrame(None)
 
-    else:
-        logger.info(f"Rainfall threshold reached for {constants.PROJECT_PREFIX}")
-        xx.sort()
-        df = stratus.load_csv_from_blob(blob_name=xx[-1])
-        return df
+    logger.info(f"Rainfall threshold reached for {constants.PROJECT_PREFIX}")
+    return stratus.load_csv_from_blob(blob_name=xx[-1])
 
 def check_cyclone_presence():
-    xx = stratus.list_container_blobs(name_starts_with=f"{constants.PROJECT_PREFIX}/processed/monitoring")
-    if len(xx) != 0:
-        xx.sort()
-        suffix = xx[-1].split("_")[1]
-        if suffix == datetime.date.today().strftime("%Y-%m-%d"):
-            df = stratus.load_csv_from_blob(blob_name=xx[-1])
-            return df
-        else :
-            logger.info(f"No storms in the area of interest.")
-            return pd.DataFrame(None)
-    else:
-        logger.info(f"No storms in the area of interest.")
+    xx = _todays_blobs("monitoring")
+    if not xx:
+        logger.info("No storms in the area of interest.")
         return pd.DataFrame(None)
+    return stratus.load_csv_from_blob(blob_name=xx[-1])
 
 def determine_trigger_phase(
     df_cyclone: pd.DataFrame,
@@ -108,19 +110,10 @@ def get_latest_monitoring_plot(plot_type:str = "storm_track") -> bytes | None:
     Returns:
         Raw PNG bytes if a plot exists for today, otherwise None.
     """
-    xx = stratus.list_container_blobs(
-        name_starts_with=f"{constants.PROJECT_PREFIX}/processed/{plot_type}_plot"
-    )
+    xx = _todays_blobs(f"{plot_type}_plot")
     if not xx:
         return None
-    xx.sort()
-    # Pattern: projects/ds-aa-mmr-cyclones/processed/storm_track_plot/storm_track_plot_YYYY-MM-DD_HH.png
-    # Pattern: projects/ds-aa-mmr-cyclones/processed/rainfall_forecast_plot/rainfall_forecast_plot_YYYY-MM-DD_HH.png
-    filename = xx[-1].split("/")[-1]
-    date_part = filename.split("_")[3]
-    if date_part == datetime.date.today().strftime("%Y-%m-%d"):
-        return stratus.load_blob_data(blob_name=xx[-1])
-    return None
+    return stratus.load_blob_data(blob_name=xx[-1])
 
 
 myanmar_time = datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime("%Hh00 %d %b. %Y")
@@ -145,7 +138,7 @@ if df_wind_speed.empty and df_rainfall.empty:
             date_myanmar=myanmar_time,
             info=threshold_info,
             plot_bytes=plot_bytes,
-            phase=phase,
+            phase=None,
         )
         campaign_id = create_campaign(
             name="MMR_monitoring_email",
