@@ -137,7 +137,7 @@ def build_workflow_status(workflow_filename: str) -> str:
     if len(scheduled_today) == 0:
         return f":heavy_minus_sign: {name}: No scheduled run today\n"
 
-    run = scheduled_today[-1]
+    run = max(scheduled_today, key=lambda r: r.get("created_at", ""))
     conclusion = run.get("conclusion")
     run_url = f"https://github.com/{GITHUB_REPO}/actions/runs/{run['id']}"
 
