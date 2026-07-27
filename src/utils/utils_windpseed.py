@@ -181,10 +181,22 @@ def plot_storm_track(
                 zorder=5,
             )
 
-    bounds = adm_boundaries.total_bounds  # [minx, miny, maxx, maxy]
-    margin = 5
-    ax.set_xlim(bounds[0] - margin, bounds[2] + margin)
-    ax.set_ylim(bounds[1] - margin, bounds[3] + margin)
+    # Frame the plot on the bbox used to clip the neighbouring countries
+    # (so their labels are never positioned outside the visible area),
+    # widened only if the ADM boundaries or storm track extend past it.
+    lon_min, lon_max, lat_min, lat_max = _PLOT_BBOX
+    adm_bounds = adm_boundaries.total_bounds  # [minx, miny, maxx, maxy]
+    track_bounds = storms_plot.total_bounds
+    xlim = (
+        min(lon_min, adm_bounds[0], track_bounds[0]),
+        max(lon_max, adm_bounds[2], track_bounds[2]),
+    )
+    ylim = (
+        min(lat_min, adm_bounds[1], track_bounds[1]),
+        max(lat_max, adm_bounds[3], track_bounds[3]),
+    )
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
 
     ax.set_xlabel("Longitude", fontsize=12)
     ax.set_ylabel("Latitude", fontsize=12)
