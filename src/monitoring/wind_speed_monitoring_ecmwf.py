@@ -57,7 +57,18 @@ def download_tracks_ecmwf():
     """
 
     # download BUFR files from ECMWF
-    bufr_files = TCForecast.fetch_bufr_ftp()
+    try:
+        bufr_files = TCForecast.fetch_bufr_ftp()
+    except UnboundLocalError as err:
+        # climada_petals' fetch_bufr_ftp references an unassigned `con` in
+        # its `finally` block when the initial FTP connection fails (e.g.
+        # DNS resolution errors), masking the real transient network error
+        # with an UnboundLocalError that the retry decorator above doesn't
+        # recognize. Re-raise as OSError so it gets retried as intended.
+        raise OSError(
+            "Failed to fetch ECMWF BUFR files due to an FTP connection "
+            "error masked by a climada_petals bug"
+        ) from err
 
     forecast = TCForecast()
     forecast.fetch_ecmwf(files=bufr_files)

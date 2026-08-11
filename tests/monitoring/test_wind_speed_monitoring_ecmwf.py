@@ -1,8 +1,10 @@
 import geopandas as gpd
 import pandas as pd
 import pytest
+import tenacity
 from shapely.geometry import Point
 
+import src.monitoring.wind_speed_monitoring_ecmwf as wsm
 import src.utils.utils_windpseed as uw
 from src.utils.utils_windpseed import plot_storm_track
 
@@ -68,3 +70,38 @@ def test_plot_storm_track_highlights_max_wind_track():
 
     assert max_wind_sid == "WP2026-C"
     plot_storm_track(storms, _adm_boundaries(), today="test", hour="00")
+
+
+def test_download_tracks_ecmwf_retries_on_masked_connection_error(monkeypatch):
+    """Regression test: a climada_petals bug must not defeat the FTP retry.
+
+    climada_petals' ``fetch_bufr_ftp`` references an unassigned ``con`` in
+    its ``finally`` block when the initial FTP connection fails (e.g. a DNS
+    resolution error), so it raises ``UnboundLocalError`` instead of the
+    underlying ``OSError``/``socket.gaierror``. Left untranslated, tenacity's
+    ``retry_if_exception_type((TimeoutError, OSError))`` never matches and
+    the call fails on the first attempt instead of retrying. This test
+    pins the workaround: the masked error must surface as ``OSError`` and
+    be retried up to the configured attempt limit.
+    """
+    call_count = 0
+
+    def _fetch_bufr_ftp(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        raise UnboundLocalError(
+            "cannot access local variable 'con' where it is not associated "
+            "with a value"
+        )
+
+    monkeypatch.setattr(
+        wsm.TCForecast, "fetch_bufr_ftp", staticmethod(_fetch_bufr_ftp)
+    )
+    monkeypatch.setattr(
+        wsm.download_tracks_ecmwf.retry, "wait", tenacity.wait_none()
+    )
+
+    with pytest.raises(OSError):
+        wsm.download_tracks_ecmwf()
+
+    assert call_count == wsm.download_tracks_ecmwf.retry.stop.max_attempt_number
