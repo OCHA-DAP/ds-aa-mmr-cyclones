@@ -13,7 +13,11 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Downloading a new issue date means 16 sequential lead-time files
+    # (rate-limited fetch + raster reprojection + blob upload each), which
+    # reliably takes just over 10 minutes and was getting cancelled by the
+    # job timeout every day.
+    timeout-minutes: 25
 
     steps:
     - name: Checkout repository

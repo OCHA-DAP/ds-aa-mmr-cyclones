@@ -174,7 +174,7 @@ def download_chirps_gefs(
     )
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmpfile:
