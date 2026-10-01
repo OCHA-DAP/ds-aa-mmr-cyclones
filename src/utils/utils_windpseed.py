@@ -19,7 +19,25 @@ load_dotenv()
 logger = get_logger(__name__)
 
 def compute_wind_speed_at_land(gdf_track):
+    """Compute the wind speed at land for each track point.
 
+    The reduced wind speed is computed by applying an exponential decay
+    factor, based on the distance to land, to the forecast wind speed::
+
+        wind_speed_at_land = 0.9807 * exp(-0.003 * min_dist_km) * V
+
+    where ``V`` is the maximum sustained wind converted to knots and
+    scaled from 10 m to 3 m height, and ``min_dist_km`` is the distance
+    from the track point to the nearest land in km.
+
+    Args:
+        gdf_track: GeoDataFrame with ``max_sustained_wind`` (m/s) and
+            ``min_dist_km`` columns.
+
+    Returns:
+        The input GeoDataFrame with added ``wind_speed_knots``,
+        ``wind_reduction_factor`` and ``wind_speed_at_land`` columns.
+    """
     gdf_track["wind_speed_knots"] = from_ms_to_knots(
         gdf_track["max_sustained_wind"]
     )
