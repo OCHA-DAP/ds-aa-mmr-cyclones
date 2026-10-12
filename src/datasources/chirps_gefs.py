@@ -253,7 +253,7 @@ def process_recent_chirps_gefs(
             columns=["issue_date", "valid_date", "mean"]
         )
     adm1 = codab.load_codab_from_blob(admin_level=1)
-    adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM_LIST)]
+    adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM1_LIST)]
     issue_date_range = pd.date_range(
         start=f"{date.year}-03-25",
         end=date,

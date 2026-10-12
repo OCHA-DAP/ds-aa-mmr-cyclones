@@ -1,7 +1,7 @@
 import pandas as pd
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 # Load .env file into environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True), override=True)
 
 from src.datasources import imerg
 from src.datasources import codab

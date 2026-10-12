@@ -119,12 +119,42 @@ _PHASE_INTROS: Dict[str, str] = {
 }
 
 
+def _render_threshold_table(
+    threshold_table: Dict[str, Dict[str, str]] | None,
+) -> str:
+    """Render the threshold status by area as an HTML table.
+
+    Args:
+        threshold_table: Mapping of row label to {area label: status}, or
+            None.
+
+    Returns:
+        HTML table string, or an empty string when there is no table.
+    """
+    if not threshold_table:
+        return ""
+    areas = list(next(iter(threshold_table.values())))
+    cell = "border: 1px solid #ccc; padding: 4px 10px;"
+    header = "".join(f'<th style="{cell}">{area}</th>' for area in areas)
+    rows = "".join(
+        f'<tr><td style="{cell}">{label}</td>'
+        + "".join(f'<td style="{cell}">{status[area]}</td>' for area in areas)
+        + "</tr>"
+        for label, status in threshold_table.items()
+    )
+    return (
+        '<br><table style="border-collapse: collapse;">'
+        f'<tr><th style="{cell}"></th>{header}</tr>{rows}</table>'
+    )
+
+
 def generate_body_email(
     storm_name,
     date_myanmar,
     info: Dict = None,
     plot_bytes: List[bytes] | None = None,
     phase: str | None = None,
+    threshold_table: Dict[str, Dict[str, str]] | None = None,
 ):
     """Generate HTML email body for cyclone monitoring/trigger emails.
 
@@ -136,6 +166,8 @@ def generate_body_email(
         plot_bytes: list of Raw PNG bytes of the needed plot, or None.
         phase: Trigger phase - 'readiness', 'action', 'observational', or
             None for a generic monitoring email.
+        threshold_table: Optional mapping of row label to {area label:
+            status}, rendered as a table of threshold status by area.
 
     Returns:
         HTML string for the email body.
@@ -161,6 +193,7 @@ def generate_body_email(
     {intro_body}
     Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
+    {_render_threshold_table(threshold_table)}
     <br><br>
     """
     HTML_PLOT = ""

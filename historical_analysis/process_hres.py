@@ -4,10 +4,10 @@ import tempfile
 import os
 import xarray as xr
 import numpy as np
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from src.datasources import codab
 
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True), override=True)
 adm_boundaries = codab.load_codab_from_blob(admin_level=1)
 gdf_adm_projected = adm_boundaries.to_crs(epsg=32647)
 

@@ -1,9 +1,11 @@
-from dotenv import load_dotenv
+from datetime import timedelta
+
+from dotenv import find_dotenv, load_dotenv
 from shapely import wkt
 
 from src.datasources import codab
 # Load .env file into environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True), override=True)
 
 from src.utils.utils_fun import *
 from src.utils.utils_fun import from_ms_to_knots
@@ -24,30 +26,30 @@ df_historical = pd.read_csv(f"results/df_full_{suff}.csv")
 df_historical = df_historical.loc[df_historical["t_delta"]==0, :]
 df_historical.sort_values(by="time", ascending=True, inplace=True)
 list_hist_storms_forecast = []
-# for row, dd in df_historical.iterrows():
-#     print(f"processing {dd.time}")
-#     start_date = pd.to_datetime(dd.time) - timedelta(days=7)
-#     end_date = pd.to_datetime(dd.time) + timedelta(days=3)
-#     storm_name = dd.storm_name
-#     # Load ECMWF forecasts as a pandas dataframe
-#     df = lens.ecmwf_storm.load_hindcasts(
-#         start_date=start_date,
-#         end_date=end_date,
-#         skip_if_missing=True
-#     )
-#     if df is not None:
-#         df.dropna(subset=["name"], inplace=True)
-#         df_storm = df[df["name"].str.contains(storm_name, case=False, na=False)]
-#         storm_ids = df_storm.id.unique()
-#         list_hist_storms_forecast.append(df_storm)
-#     print(f" {dd.time} Done")
-#     print("---------------")
+for row, dd in df_historical.iterrows():
+    print(f"processing {dd.time}")
+    start_date = pd.to_datetime(dd.time) - timedelta(days=7)
+    end_date = pd.to_datetime(dd.time) + timedelta(days=3)
+    storm_name = dd.storm_name
+    # Load ECMWF forecasts as a pandas dataframe
+    df = lens.ecmwf_storm.load_hindcasts(
+        start_date=start_date,
+        end_date=end_date,
+        skip_if_missing=True
+    )
+    if df is not None:
+        df.dropna(subset=["name"], inplace=True)
+        df_storm = df[df["name"].str.contains(storm_name, case=False, na=False)]
+        storm_ids = df_storm.id.unique()
+        list_hist_storms_forecast.append(df_storm)
+    print(f" {dd.time} Done")
+    print("---------------")
 
-#
-# df_hist_storms_forecast = pd.concat(list_hist_storms_forecast, ignore_index=True)
-# #Get track data
+
+df_hist_storms_forecast = pd.concat(list_hist_storms_forecast, ignore_index=True)
+#Get track data
 gdf_tracks = lens.ecmwf_storm.get_tracks(df_hist_storms_forecast)
-# gdf_tracks.to_csv(f"results/ecmw_tracks_{suff}.csv", index=False)
+gdf_tracks.to_csv(f"results/ecmw_tracks_{suff}.csv", index=False)
 gdf_tracks = pd.read_csv(f"results/ecmw_tracks_{suff}.csv")
 gdf_tracks["geometry"] = gdf_tracks["geometry"].apply(wkt.loads)
 gdf_tracks = gpd.GeoDataFrame(gdf_tracks, geometry="geometry", crs="EPSG:4326")

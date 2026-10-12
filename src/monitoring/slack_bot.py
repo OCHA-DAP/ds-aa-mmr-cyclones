@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 
 import ocha_stratus as stratus
+import pandas as pd
 import requests
 
 import src.utils.constants as constants
@@ -100,7 +101,9 @@ def build_signals_text() -> tuple[str, int]:
     wind_blobs = _latest_blob_today("wind_exceedance_")
     if wind_blobs:
         n_alerts += 1
-        sids = stratus.load_csv_from_blob(blob_name=sorted(wind_blobs)[-1])["sid"]
+        sids = pd.concat(
+            [stratus.load_csv_from_blob(blob_name=blob)["sid"] for blob in wind_blobs]
+        )
         wind_names = sorted({sid_to_name.get(str(sid), str(sid)) for sid in sids})
         lines.append(
             f":rotating_light: *Wind threshold exceeded* ({constants.wind_speed_alert_level} kt)"

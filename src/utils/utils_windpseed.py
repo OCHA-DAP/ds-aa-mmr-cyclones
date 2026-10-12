@@ -80,6 +80,91 @@ def compute_distance_to_land(gdf_track, gdf_land):
     return gdf_track
 
 
+def compute_wind_speed_at_adm_list(
+    gdf_track: gpd.GeoDataFrame,
+    gdf_adm: gpd.GeoDataFrame,
+    adm_column: str,
+    adm_list: list[str],
+    threshold: float,
+) -> gpd.GeoDataFrame:
+    """Compute wind speed at land, restricted to the ADM areas of interest.
+
+    Workflow:
+
+    1. Compute the wind speed at land against all of Myanmar.
+    2. For the points at or above ``threshold``, find the ADM unit nearest
+       to the point (where the threshold is exceeded).
+    3. Where that ADM is not in ``adm_list``, the wind speed is recomputed
+       from the distance to the ``adm_list`` geometries only. Where it is,
+       the country-wide value already applies, as the nearest land is the
+       same. Both cases equal the wind speed computed from the distance to
+       ``adm_list``, which is therefore computed for every point so that
+       ``min_dist_km`` is always relative to the areas of interest.
+
+    Args:
+        gdf_track: GeoDataFrame of track points with ``max_sustained_wind``
+            (m/s) and a point geometry.
+        gdf_adm: GeoDataFrame of ADM boundaries with ``adm_column``.
+        adm_column: Column of ``gdf_adm`` holding the ADM names.
+        adm_list: Names of the ADM units of interest.
+        threshold: Wind speed threshold (knots).
+
+    Returns:
+        GeoDataFrame in EPSG:3857 with the ``min_dist_km`` and wind columns
+        relative to ``adm_list``, plus ``wind_speed_at_land_country`` (wind
+        speed relative to all of Myanmar) and ``exceedance_adm`` (nearest
+        ADM name where the country-wide wind speed reaches ``threshold``,
+        otherwise None).
+    """
+    gdf_track = gdf_track.reset_index(drop=True)
+
+    gdf_country = compute_wind_speed_at_land(
+        compute_distance_to_land(gdf_track, gdf_adm.dissolve())
+    )
+    gdf_result = compute_wind_speed_at_land(
+        compute_distance_to_land(
+            gdf_track, gdf_adm[gdf_adm[adm_column].isin(adm_list)]
+        )
+    )
+    gdf_result["wind_speed_at_land_country"] = gdf_country["wind_speed_at_land"]
+    gdf_result["exceedance_adm"] = None
+
+    exceeds = gdf_country["wind_speed_at_land"] >= threshold
+    if exceeds.any():
+        nearest = gpd.sjoin_nearest(
+            gdf_country.loc[exceeds, ["geometry"]],
+            gdf_adm.to_crs(3857)[[adm_column, "geometry"]],
+            how="left",
+        )
+        nearest = nearest[~nearest.index.duplicated()]
+        gdf_result.loc[nearest.index, "exceedance_adm"] = nearest[adm_column]
+
+    return gdf_result
+
+
+def get_wind_exceedance(
+    gdf_track: pd.DataFrame, wind_column: str, threshold: float
+) -> pd.DataFrame:
+    """Return the storm members whose maximum wind speed reaches a threshold.
+
+    Args:
+        gdf_track: Track points with ``sid``, ``ensemble_number`` and
+            ``wind_column`` columns.
+        wind_column: Column holding the wind speed at land (knots).
+        threshold: Wind speed threshold (knots).
+
+    Returns:
+        DataFrame with one row per ``sid``/``ensemble_number`` whose maximum
+        ``wind_column`` is at or above ``threshold``.
+    """
+    wind_max = (
+        gdf_track.groupby(["sid", "ensemble_number"])[wind_column]
+        .max()
+        .reset_index()
+    )
+    return wind_max[wind_max[wind_column] >= threshold]
+
+
 # ----------------------------------------------------
 # PLOT STORM TRACK
 # ----------------------------------------------------

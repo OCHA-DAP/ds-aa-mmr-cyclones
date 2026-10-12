@@ -1,9 +1,9 @@
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from shapely import wkt
 
 from src.datasources import codab
 # Load .env file into environment variables
-load_dotenv()
+load_dotenv(find_dotenv(usecwd=True), override=True)
 
 from src.utils.utils_fun import *
 from src.utils.utils_fun import from_ms_to_knots
