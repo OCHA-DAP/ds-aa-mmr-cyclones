@@ -1,4 +1,5 @@
 import datetime
+import html.parser
 import sys
 import tempfile
 import requests
@@ -9,6 +10,8 @@ import xarray as xr
 from io import BytesIO
 from azure.core.exceptions import ResourceNotFoundError
 from tqdm import tqdm
+import time
+import random
 
 from src.datasources import codab
 from src.utils import constants
@@ -18,27 +21,97 @@ logger = get_logger(__name__)
 
 CHIRPS_GEFS_URL = (
     "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/daily_{chirps_gefs_lead_time}day/"
+    "CHIRPS-GEFS_precip_v12/daily_16day/"
     "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
     "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
 )
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
+CHIRPS_GEFS_DIR_URL = (
+    "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
+    "CHIRPS-GEFS_precip_v12/daily_16day/{year}/{month:02d}/"
+)
 
-def download_recent_chirps_gefs():
+
+class _DirLinkParser(html.parser.HTMLParser):
+    """Collect href values from an nginx directory listing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        if tag == "a":
+            for attr, value in attrs:
+                if attr == "href" and value is not None:
+                    self.links.append(value)
+
+
+def _fetch_available_issue_dates(
+    candidates: list[pd.Timestamp],
+) -> set[datetime.date]:
+    """Query CHIRPS-GEFS server directory listings to find available dates.
+
+    Args:
+        candidates: Issue dates to check availability for.
+
+    Returns:
+        Set of dates confirmed available on the server.
+
+    Raises:
+        RuntimeError: If the server returns 403 for any queried directory.
+    """
+    year_months = {(ts.year, ts.month) for ts in candidates}
+    available: set[datetime.date] = set()
+    for year, month in year_months:
+        url = CHIRPS_GEFS_DIR_URL.format(year=year, month=month)
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 403:
+                raise RuntimeError(
+                    f"Access denied (403) querying directory: {url}"
+                ) from e
+            logger.warning(f"Could not fetch directory listing {url}: {e}")
+            continue
+
+        parser = _DirLinkParser()
+        parser.feed(response.text)
+        for link in parser.links:
+            # Directory entries are "DD/" (two-digit day)
+            stripped = link.rstrip("/")
+            if stripped.isdigit() and len(stripped) == 2:
+                available.add(datetime.date(year, month, int(stripped)))
+
+    return available
+
+
+def download_recent_chirps_gefs(
+    date: datetime.date | None = None,
+) -> None:
+    """Download recent CHIRPS-GEFS data up to the specified date.
+
+    Args:
+        date: The end date for the download range. Defaults to today.
+    """
+    if date is None:
+        date = datetime.date.today()
+
     adm0 = codab.load_codab_from_blob(admin_level=0)
     total_bounds = adm0.total_bounds
 
-    current_year = datetime.date.today().year
     issue_date_range = pd.date_range(
-        start=f"{current_year}-03-15",
-        end=datetime.date.today(),
+        start=f"2026-03-15",
+        end=date,
         freq="D",
     )
 
     existing_files = stratus.list_container_blobs(
         name_starts_with=f"{constants.PROJECT_PREFIX}/"
         f"{CHIRPS_GEFS_BLOB_DIR}/"
-        f"chirps-gefs-mmr_issued-{current_year}"
+        f"chirps-gefs-mmr_issued-{date.year}"
     )
 
     existing_issue_dates = [
@@ -46,13 +119,20 @@ def download_recent_chirps_gefs():
         for f in existing_files
     ]
     logger.info(
-        f"Found {len(existing_issue_dates)} existing files for {current_year}"
+        f"Found {len(existing_issue_dates)} existing files for {date.year}"
     )
     download_dates = [
         d for d in issue_date_range if d not in existing_issue_dates
     ]
+
+    available_on_server = _fetch_available_issue_dates(download_dates)
+    download_dates = [
+        d for d in download_dates if d.date() in available_on_server
+    ]
     logger.info(
-        f"Downloading {len(download_dates)} new issue dates for {current_year}: {[str(x.date()) for x in download_dates]}"  # noqa: E501
+        f"Downloading {len(download_dates)} new issue dates for {date.year} "
+        f"(after server availability check): "
+        f"{[str(x.date()) for x in download_dates]}"
     )
 
     for issue_date in tqdm(
@@ -61,6 +141,7 @@ def download_recent_chirps_gefs():
     ):
         for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
+            time.sleep(random.uniform(2, 6))
             download_chirps_gefs(
                 issue_date,
                 valid_date,
@@ -93,7 +174,7 @@ def download_chirps_gefs(
     )
 
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=30)
         response.raise_for_status()
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmpfile:
@@ -110,6 +191,17 @@ def download_chirps_gefs(
         with open(output_tmp, "rb") as f:
             stratus.upload_blob_data(data=f, blob_name=output_filename, container_name=output_path)
 
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code == 403:
+            raise RuntimeError(
+                f"Access denied (403) for CHIRPS GEFS data: "
+                f"issue={issue_date.date()} valid={valid_date.date()}. "
+                f"URL may require authentication or data is restricted."
+            ) from e
+        logger.warning(
+            f"Failed to download CHIRPS GEFS data for "
+            f"{issue_date.date()} valid {valid_date.date()}: {e}"
+        )
     except Exception as e:
         logger.warning(
             f"Failed to download or process CHIRPS GEFS data for "
@@ -137,8 +229,20 @@ def load_chirps_gefs_raster(
 
 
 
-def process_recent_chirps_gefs(verbose: bool = False):
-    """Process only 2026 CHIRPS-GEFS forecasts for Myanmar."""
+def process_recent_chirps_gefs(
+    date: datetime.date | None = None, verbose: bool = False
+) -> pd.DataFrame:
+    """Process recent CHIRPS-GEFS forecasts for Myanmar up to the specified date.
+
+    Args:
+        date: The end date for the processing range. Defaults to today.
+        verbose: Whether to print verbose output. Defaults to False.
+
+    Returns:
+        DataFrame with processed CHIRPS-GEFS mean daily data.
+    """
+    if date is None:
+        date = datetime.date.today()
     try:
         existing_df = load_recent_chirps_gefs_mean_daily()
     except ResourceNotFoundError:
@@ -149,10 +253,10 @@ def process_recent_chirps_gefs(verbose: bool = False):
             columns=["issue_date", "valid_date", "mean"]
         )
     adm1 = codab.load_codab_from_blob(admin_level=1)
-    adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM_LIST)]
+    adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM1_LIST)]
     issue_date_range = pd.date_range(
-        start="2026-03-25",
-        end=datetime.date.today(),
+        start=f"{date.year}-03-25",
+        end=date,
         freq="D",
     )
     unprocessed_issue_date_range = [
@@ -217,8 +321,18 @@ def load_recent_chirps_gefs_mean_daily():
         "mmr_chirps_gefs_mean_daily.parquet"
     )
 
-def check_chirps_gefs_trigger(df: pd.DataFrame):
-    today = datetime.date.today().strftime("%Y-%m-%d")
+def check_chirps_gefs_trigger(
+    df: pd.DataFrame, date: datetime.date | None = None
+) -> None:
+    """Check CHIRPS-GEFS data against the rainfall threshold.
+
+    Args:
+        df: DataFrame with CHIRPS-GEFS mean daily data.
+        date: The date to use for output file naming. Defaults to today.
+    """
+    if date is None:
+        date = datetime.date.today()
+    date_str = date.strftime("%Y-%m-%d")
     df = df.sort_values(["issue_date", "valid_date"])
 
     df["rolling_sum_3"] = (
@@ -227,9 +341,14 @@ def check_chirps_gefs_trigger(df: pd.DataFrame):
         .sum()
         .reset_index(level=[0, 1], drop=True)
     )
-    df_trigger_rainfall = df[df["rolling_sum_3"]>=constants.rainfall_alert_level_forecast]
+    df_trigger_rainfall = df[
+        df["rolling_sum_3"] >= constants.rainfall_alert_level_forecast
+    ]
     if not df_trigger_rainfall.empty:
-        file_name = f"{constants.PROJECT_PREFIX}/processed/rainfall_exceedance_{today}.csv"
+        file_name = (
+            f"{constants.PROJECT_PREFIX}/processed/"
+            f"rainfall_exceedance_{date_str}.csv"
+        )
         stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
         logger.info("Rainfall threshold exceeded.")
     else:

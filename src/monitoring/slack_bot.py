@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 
 import ocha_stratus as stratus
+import pandas as pd
 import requests
 
 import src.utils.constants as constants
@@ -21,6 +22,7 @@ GITHUB_REPO = os.getenv("GITHUB_REPO", "ocha-dap/ds-aa-mmr-cyclones")
 WORKFLOWS = [
     "run_monitoring.yml",
     "run_update_ecmwf.yml",
+    "run_update_cma.yml",
     "run_update_chirps_gefs.yml",
 ]
 
@@ -77,23 +79,40 @@ def build_signals_text() -> tuple[str, int]:
     lines = []
     n_alerts = 0
 
+    sid_to_name: dict[str, str] = {}
     cyclone_blobs = _latest_blob_today("monitoring_")
     if cyclone_blobs:
         n_alerts += 1
-        lines.append(":rotating_light: *Cyclone in area of interest* — track data available today")
+        df_cyclone = stratus.load_csv_from_blob(blob_name=sorted(cyclone_blobs)[-1])
+        sid_to_name = (
+            df_cyclone[["sid", "storm_name"]]
+            .drop_duplicates("sid")
+            .astype(str)
+            .set_index("sid")["storm_name"]
+            .to_dict()
+        )
+        lines.append(
+            ":rotating_light: *Cyclone in area of interest* "
+            f"({', '.join(sorted(set(sid_to_name.values())))}) — track data available today"
+        )
     else:
         lines.append(":large_green_circle: No cyclone in area of interest today")
 
     wind_blobs = _latest_blob_today("wind_exceedance_")
     if wind_blobs:
         n_alerts += 1
+        sids = pd.concat(
+            [stratus.load_csv_from_blob(blob_name=blob)["sid"] for blob in wind_blobs]
+        )
+        wind_names = sorted({sid_to_name.get(str(sid), str(sid)) for sid in sids})
         lines.append(
             f":rotating_light: *Wind threshold exceeded* ({constants.wind_speed_alert_level} kt)"
+            f" — {', '.join(wind_names)}"
         )
     else:
         lines.append(f":large_green_circle: Wind threshold not exceeded ({constants.wind_speed_alert_level} kt)")
 
-    rainfall_blobs = _latest_blob_today("rainfall_")
+    rainfall_blobs = _latest_blob_today("rainfall_exceedance")
     if rainfall_blobs:
         n_alerts += 1
         lines.append(":rotating_light: *Rainfall threshold exceeded*")
@@ -136,7 +155,7 @@ def build_workflow_status(workflow_filename: str) -> str:
     if len(scheduled_today) == 0:
         return f":heavy_minus_sign: {name}: No scheduled run today\n"
 
-    run = scheduled_today[-1]
+    run = max(scheduled_today, key=lambda r: r.get("created_at", ""))
     conclusion = run.get("conclusion")
     run_url = f"https://github.com/{GITHUB_REPO}/actions/runs/{run['id']}"
 

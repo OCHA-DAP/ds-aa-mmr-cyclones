@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 PROJECT_PREFIX = "ds-aa-mmr-cyclones"
 ISO3 = "mmr"
-adm_level = 1
+adm_level = 3
 
 adm_column = f"ADM{adm_level}_EN"
 adm_pcode = f"ADM{adm_level}_PCODE"
@@ -63,4 +63,18 @@ AA_DATA_DIR_NEW = os.getenv("AA_DATA_DIR_NEW")
 
 # CRS
 MMR_UTM = 32647
-ADM_LIST = ["Rakhine"]
+# Areas of analysis: edit these lists to change the areas monitored
+ADM1_LIST = ["Rakhine"]
+ADM3_LIST = [
+    "Buthidaung",
+    "Kyauktaw",
+    "Maungdaw",
+    "Mrauk-U",
+    "Pauktaw",
+    "Ponnagyun",
+    "Rathedaung",
+    "Sittwe",
+    "Minbya",
+    "Myebon",
+]
+ADM_LIST = ADM3_LIST  # areas at constants.adm_level

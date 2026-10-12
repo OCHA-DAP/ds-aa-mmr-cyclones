@@ -1,6 +1,6 @@
 import base64
 import os
-from typing import Dict
+from typing import Dict, List
 
 import requests
 
@@ -100,11 +100,61 @@ def send_transactional(
     r.raise_for_status()
     return r.json()
 
+_PHASE_INTROS: Dict[str, str] = {
+    "readiness": (
+        "The <strong>readiness threshold</strong> has been reached for Cyclone {storm_name}. "
+        "The forecast indicates landfall in approximately 3&ndash;5 days. "
+        "Readiness activities in line with the anticipatory action framework should now commence."
+    ),
+    "action": (
+        "The <strong>action threshold</strong> has been reached for Cyclone {storm_name}. "
+        "The forecast indicates landfall in approximately 48&ndash;72 hours. "
+        "All anticipatory actions in line with the framework should now commence."
+    ),
+    "observational": (
+        "Cyclone {storm_name} is now in the <strong>observational phase</strong>. "
+        "Landfall is forecast within 48 hours. "
+        "The situation is being closely monitored."
+    ),
+}
+
+
+def _render_threshold_table(
+    threshold_table: Dict[str, Dict[str, str]] | None,
+) -> str:
+    """Render the threshold status by area as an HTML table.
+
+    Args:
+        threshold_table: Mapping of row label to {area label: status}, or
+            None.
+
+    Returns:
+        HTML table string, or an empty string when there is no table.
+    """
+    if not threshold_table:
+        return ""
+    areas = list(next(iter(threshold_table.values())))
+    cell = "border: 1px solid #ccc; padding: 4px 10px;"
+    header = "".join(f'<th style="{cell}">{area}</th>' for area in areas)
+    rows = "".join(
+        f'<tr><td style="{cell}">{label}</td>'
+        + "".join(f'<td style="{cell}">{status[area]}</td>' for area in areas)
+        + "</tr>"
+        for label, status in threshold_table.items()
+    )
+    return (
+        '<br><table style="border-collapse: collapse;">'
+        f'<tr><th style="{cell}"></th>{header}</tr>{rows}</table>'
+    )
+
+
 def generate_body_email(
     storm_name,
     date_myanmar,
     info: Dict = None,
-    plot_bytes: bytes | None = None,
+    plot_bytes: List[bytes] | None = None,
+    phase: str | None = None,
+    threshold_table: Dict[str, Dict[str, str]] | None = None,
 ):
     """Generate HTML email body for cyclone monitoring/trigger emails.
 
@@ -113,30 +163,50 @@ def generate_body_email(
         date_myanmar: Formatted datetime string in Myanmar local time.
         info: Dict with keys 'wind_speed_threshold_reached' and
             'rainfall_threshold_reached'.
-        plot_bytes: Raw PNG bytes of the storm track plot, or None.
+        plot_bytes: list of Raw PNG bytes of the needed plot, or None.
+        phase: Trigger phase - 'readiness', 'action', 'observational', or
+            None for a generic monitoring email.
+        threshold_table: Optional mapping of row label to {area label:
+            status}, rendered as a table of threshold status by area.
 
     Returns:
         HTML string for the email body.
     """
+    if phase in _PHASE_INTROS:
+        phase_text = _PHASE_INTROS[phase].format(storm_name=storm_name)
+        intro_body = (
+            f"{phase_text}<br><br>"
+            f"Dear colleagues,<br>"
+            f"Please find more information below.<br>"
+        )
+    else:
+        intro_body = (
+            "Dear colleagues,<br>"
+            "A new forecast track has been released by ECMWF (European Centre for "
+            "Medium-Range Weather Forecasts). Also included is the forecasted "
+            "precipitation from CHIRPS-GEFS.<br>"
+            "Please find more information below.<br>"
+        )
+
     HTML_INTRO = f"""
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
-    Dear colleagues,<br>
-    A new forecast track has been released by ECMWF (European Centre for Medium-Range Weather Forecasts). Also included is the forecasted precipitation from CHIRPS-GEFS.<br>
-    Please find more information below.<br>
+    {intro_body}
     Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
+    {_render_threshold_table(threshold_table)}
     <br><br>
     """
-
     HTML_PLOT = ""
     if plot_bytes is not None:
-        encoded = base64.b64encode(plot_bytes).decode("ascii")
-        HTML_PLOT = f"""
-        <div style="text-align: center;">
-            <img src="data:image/png;base64,{encoded}" alt="Storm Track Plot" style="max-width: 80%; height: auto;">
-        </div>
-        <br><br>
-        """
+        for plot in plot_bytes:
+            if plot is not None:
+                encoded = base64.b64encode(plot).decode("ascii")
+                HTML_PLOT = HTML_PLOT + f"""
+                <div style="text-align: center;">
+                    <img src="data:image/png;base64,{encoded}" alt="Missing Plot" style="max-width: 80%; height: auto;">
+                </div>
+                <br><br>
+                """
 
     HTML_CONCLUSION = """
     <br>
