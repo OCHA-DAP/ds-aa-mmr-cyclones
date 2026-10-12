@@ -121,7 +121,7 @@ def main():
         )
         # compute wind reduction
         gdf_track = compute_wind_speed_at_land(gdf_track)
-
+        gdf_track["source"] = "CMA"
 
         close_storms = (
             gdf_track
@@ -160,7 +160,13 @@ def main():
             logger.info("Monitoring data uploaded to blob storage.")
 
             # Generate and upload plot
-            plot_storm_track(storms_area_interest, adm_boundaries, today, hour)
+            plot_storm_track(
+                storms_area_interest,
+                adm_boundaries,
+                today,
+                hour,
+                filter_name="all",
+            )
 
         # --- WIND STORMS ---
         if not wind_storms.empty:

@@ -8,6 +8,7 @@ import ocha_stratus as stratus
 from src.utils import constants
 from src.utils.listmonk import create_campaign, generate_body_email, send_campaign
 from src.utils.logging import get_logger
+from src.utils.storm_names import drop_unnamed_storms
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -33,9 +34,8 @@ def check_wind_speed_trigger_data():
         logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
         return pd.DataFrame(None)
 
-    df = stratus.load_csv_from_blob(blob_name=xx[-1])
-    has_valid_sid = (~df["sid"].astype(str).str.match(r"^\d{2}B$", na=False)).any()
-    if has_valid_sid:
+    df = drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=xx[-1]), "sid")
+    if not df.empty:
         logger.info(f"Wind speed threshold reached for {constants.PROJECT_PREFIX}")
         return df
     logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
@@ -55,7 +55,10 @@ def check_cyclone_presence():
     if not xx:
         logger.info("No storms in the area of interest.")
         return pd.DataFrame(None)
-    return stratus.load_csv_from_blob(blob_name=xx[-1])
+    df = drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=xx[-1]), "storm_name")
+    if df.empty:
+        logger.info("Only unnamed storms (e.g. 70B) in the area of interest.")
+    return df
 
 def determine_trigger_phase(
     df_cyclone: pd.DataFrame,
