@@ -184,7 +184,7 @@ def main():
         )
         # compute wind reduction
         gdf_track = compute_wind_speed_at_land(gdf_track)
-
+        gdf_track["source"] = "ECMWF"
 
         close_storms = (
             gdf_track
@@ -226,7 +226,13 @@ def main():
                 storms_area_interest_plot = storms_area_interest
 
             # Generate and upload plot
-            plot_storm_track(storms_area_interest_plot, adm_boundaries, today, hour)
+            plot_storm_track(
+                storms_area_interest_plot,
+                adm_boundaries,
+                today,
+                hour,
+                filter_name="all",
+            )
 
         # --- WIND STORMS ---
         if not wind_storms.empty:

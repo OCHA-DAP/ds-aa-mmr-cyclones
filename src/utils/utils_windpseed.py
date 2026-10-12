@@ -2,6 +2,7 @@ import cartopy.io.shapereader as shpreader
 from dotenv import load_dotenv
 import numpy as np
 import io
+from typing import Literal
 
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
@@ -13,6 +14,7 @@ from shapely.geometry import box as shapely_box
 import src.utils.constants as constants
 from src.datasources import codab
 from src.utils.logging import get_logger
+from src.utils.storm_names import is_unnamed_storm
 from src.utils.utils_fun import convert_10m_wind_to_3m, from_ms_to_knots
 
 load_dotenv()
@@ -114,7 +116,8 @@ def plot_storm_track(
     hour: str,
     file_name: str | None = None,
     local_path: str | None = None,
-) -> str:
+    filter_name: Literal["ECMWF", "CMA", "all"] | None = None,
+) -> str | None:
     """Create a plot showing Myanmar, neighbouring countries, and storm tracks.
 
     The track with the highest maximum wind speed at land is highlighted in
@@ -132,10 +135,26 @@ def plot_storm_track(
         file_name: Optional override for the uploaded blob filename.
         local_path: If provided, save the figure to this local filesystem path
             in addition to uploading to blob storage.
+        filter_name: Source whose unnamed storms (identifier of two digits and
+            one letter, e.g. ``70B``) are left out of the plot: ``"ECMWF"``,
+            ``"CMA"``, or ``"all"`` for both. ``None`` applies no filter.
+            Sources are matched against the ``source`` column of
+            ``storms_area_interest``.
 
     Returns:
-        The blob filename under which the plot was uploaded.
+        The blob filename under which the plot was uploaded, or None if no
+        track is left to plot after filtering.
     """
+    if filter_name is not None:
+        sources = ("ECMWF", "CMA") if filter_name == "all" else (filter_name,)
+        drop_mask = storms_area_interest["source"].isin(sources) & is_unnamed_storm(
+            storms_area_interest["storm_name"]
+        )
+        storms_area_interest = storms_area_interest[~drop_mask]
+        if storms_area_interest.empty:
+            logger.info("No named storm tracks left to plot after filtering.")
+            return None
+
     fig, ax = plt.subplots(figsize=(14, 12))
 
     # --- Neighbouring countries ---
