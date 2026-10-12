@@ -27,15 +27,26 @@ def _todays_blobs(prefix: str) -> list[str]:
     return sorted(b for b in blobs if today in b)
 
 
+UNNAMED_STORM_PATTERN = r"^\d{2}[A-Za-z]$"
+
+
+def _drop_unnamed_storms(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Drop rows whose storm identifier is two digits plus one letter (e.g. 70B).
+
+    Such identifiers are placeholders for not-yet-named systems, so no email
+    is sent for them.
+    """
+    return df[~df[column].astype(str).str.match(UNNAMED_STORM_PATTERN, na=False)]
+
+
 def check_wind_speed_trigger_data():
     xx = _todays_blobs("wind")
     if not xx:
         logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
         return pd.DataFrame(None)
 
-    df = stratus.load_csv_from_blob(blob_name=xx[-1])
-    has_valid_sid = (~df["sid"].astype(str).str.match(r"^\d{2}B$", na=False)).any()
-    if has_valid_sid:
+    df = _drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=xx[-1]), "sid")
+    if not df.empty:
         logger.info(f"Wind speed threshold reached for {constants.PROJECT_PREFIX}")
         return df
     logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
@@ -55,7 +66,10 @@ def check_cyclone_presence():
     if not xx:
         logger.info("No storms in the area of interest.")
         return pd.DataFrame(None)
-    return stratus.load_csv_from_blob(blob_name=xx[-1])
+    df = _drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=xx[-1]), "storm_name")
+    if df.empty:
+        logger.info("Only unnamed storms (e.g. 70B) in the area of interest.")
+    return df
 
 def determine_trigger_phase(
     df_cyclone: pd.DataFrame,
