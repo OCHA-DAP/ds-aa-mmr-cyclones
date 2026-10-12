@@ -6,7 +6,11 @@ from dotenv import load_dotenv
 
 import pandas as pd
 import ocha_stratus as stratus
-from src.utils.utils_windpseed import compute_distance_to_land, compute_wind_speed_at_land, plot_storm_track
+from src.utils.utils_windpseed import (
+    compute_wind_speed_at_adm_list,
+    get_wind_exceedance,
+    plot_storm_track,
+)
 from src.utils.logging import get_logger
 from src.datasources import codab
 import src.utils.constants as constants
@@ -97,12 +101,7 @@ def main():
     hour = now.strftime("%H")
 
     adm_boundaries = codab.load_codab_from_blob(admin_level=constants.adm_level)
-    adm_buffer = 0  # Use 0, 50 or 100: these are in km
-    gdf_adm_projected = adm_boundaries.to_crs(epsg=constants.MMR_UTM)
-    gdf_adm_projected["geometry"] = gdf_adm_projected.geometry.buffer(
-        adm_buffer * 1000
-    )
-    gdf_adm_projected_filtered = gdf_adm_projected.loc[adm_boundaries[constants.adm_column].isin(constants.ADM_LIST)]
+    adm1_boundaries = codab.load_codab_from_blob(admin_level=1)
 
     logger.info("Downloading cyclone forecasts...")
     tracks = download_tracks_cma()
@@ -115,12 +114,24 @@ def main():
         return
     else:
 
-        gdf_track = compute_distance_to_land(
+        # Restricted area (ADM3_LIST): drives distances and the trigger
+        gdf_track = compute_wind_speed_at_adm_list(
             gdf_filtered,
-            gdf_adm_projected_filtered
+            adm_boundaries,
+            constants.adm_column,
+            constants.ADM3_LIST,
+            constants.wind_speed_alert_level,
         )
-        # compute wind reduction
-        gdf_track = compute_wind_speed_at_land(gdf_track)
+        # Wider area (ADM1_LIST), e.g. Rakhine
+        gdf_adm1_track = compute_wind_speed_at_adm_list(
+            gdf_filtered,
+            adm1_boundaries,
+            "ADM1_EN",
+            constants.ADM1_LIST,
+            constants.wind_speed_alert_level,
+        )
+        gdf_track["wind_speed_at_land_adm1"] = gdf_adm1_track["wind_speed_at_land"]
+        gdf_track["exceedance_adm1"] = gdf_adm1_track["exceedance_adm"]
         gdf_track["source"] = "CMA"
 
         close_storms = (
@@ -136,16 +147,12 @@ def main():
 
         storms_area_interest = gdf_track[((gdf_track["ensemble_number"].isin(close_storms_idx["ensemble_number"])) & (gdf_track["sid"].isin(close_storms_idx["sid"])))]
 
-        wind_storms = (
-            gdf_track
-            .groupby(["sid", "ensemble_number"])["wind_speed_at_land"]
-            .max()
-            .reset_index()
+        wind_storms = get_wind_exceedance(
+            gdf_track, "wind_speed_at_land", constants.wind_speed_alert_level
         )
-
-        wind_storms = wind_storms[
-            wind_storms["wind_speed_at_land"] >= constants.wind_speed_alert_level
-            ]
+        wind_storms_adm1 = get_wind_exceedance(
+            gdf_track, "wind_speed_at_land_adm1", constants.wind_speed_alert_level
+        )
 
         # --- CLOSE STORMS ---
         if not storms_area_interest.empty:
@@ -168,10 +175,10 @@ def main():
                 filter_name="all",
             )
 
-        # --- WIND STORMS ---
+        # --- WIND STORMS (restricted area, ADM3_LIST) ---
         if not wind_storms.empty:
             logger.info("There are data exceeding the wind speed threshold.")
-            file_name = f"wind_exceedance_{today}_{hour}_cma.csv"
+            file_name = f"wind_exceedance_adm3_{today}_{hour}_cma.csv"
 
             stratus.upload_csv_to_blob(
                 df=wind_storms,
@@ -179,6 +186,20 @@ def main():
                 stage="dev",
             )
             logger.info("Data exceeding the wind speed threshold uploaded to blob storage.")
+
+
+        # --- WIND STORMS (wider area, ADM1_LIST) ---
+        if not wind_storms_adm1.empty:
+            logger.info("There are data exceeding the wind speed threshold in ADM1.")
+            stratus.upload_csv_to_blob(
+                df=wind_storms_adm1,
+                blob_name=(
+                    f"{constants.PROJECT_PREFIX}/processed/"
+                    f"wind_exceedance_adm1_{today}_{hour}_cma.csv"
+                ),
+                stage="dev",
+            )
+            logger.info("ADM1 wind exceedance data uploaded to blob storage.")
 
 # ----------------------------------------------------
 

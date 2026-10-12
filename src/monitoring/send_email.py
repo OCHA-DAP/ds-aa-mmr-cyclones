@@ -1,4 +1,5 @@
 import datetime
+import re
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -28,18 +29,65 @@ def _todays_blobs(prefix: str) -> list[str]:
     return sorted(b for b in blobs if today in b)
 
 
-def check_wind_speed_trigger_data():
-    xx = _todays_blobs("wind")
-    if not xx:
-        logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
-        return pd.DataFrame(None)
+WIND_FILE_REGEX = re.compile(r"wind_exceedance_(adm[13])_.*_(\w+)\.csv$")
+AREA_LABELS = {
+    "adm3": "Restricted area",
+    "adm1": "Wider area (Rakhine)",
+}
 
-    df = drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=xx[-1]), "sid")
-    if not df.empty:
-        logger.info(f"Wind speed threshold reached for {constants.PROJECT_PREFIX}")
-        return df
-    logger.info(f"Wind speed threshold not reached {constants.PROJECT_PREFIX}")
-    return pd.DataFrame(None)
+
+def check_wind_speed_trigger_data() -> dict[tuple[str, str], pd.DataFrame]:
+    """Load today's latest wind exceedance data per area and source.
+
+    Returns:
+        Mapping of (area, source) to the exceedance DataFrame (named storms
+        only), e.g. ``("adm1", "ecmwf")``. Empty when no file exists today.
+    """
+    latest: dict[tuple[str, str], str] = {}
+    for blob in _todays_blobs("wind_exceedance_"):
+        match = WIND_FILE_REGEX.search(blob)
+        if match:
+            latest[match.groups()] = blob  # sorted: the last blob is latest
+    return {
+        key: drop_unnamed_storms(stratus.load_csv_from_blob(blob_name=blob), "sid")
+        for key, blob in latest.items()
+    }
+
+
+def build_threshold_table(
+    wind_data: dict[tuple[str, str], pd.DataFrame],
+    df_rainfall: pd.DataFrame,
+) -> dict[str, dict[str, str]]:
+    """Build the threshold status table: rows are components, columns areas.
+
+    Rainfall is only computed for the wider area, so it is "Not assessed"
+    for the restricted one.
+
+    Args:
+        wind_data: Output of ``check_wind_speed_trigger_data``.
+        df_rainfall: Rainfall exceedance DataFrame (empty if not reached).
+
+    Returns:
+        Mapping of row label to {area label: "REACHED" / "NOT REACHED" /
+        "Not assessed"}.
+    """
+    sources = sorted({source for _, source in wind_data} | {"ecmwf", "cma"})
+    table = {
+        f"Wind speed ({source.upper()})": {
+            label: (
+                "REACHED"
+                if not wind_data.get((area, source), pd.DataFrame()).empty
+                else "NOT REACHED"
+            )
+            for area, label in AREA_LABELS.items()
+        }
+        for source in sources
+    }
+    table["Rainfall"] = {
+        AREA_LABELS["adm3"]: "Not assessed",
+        AREA_LABELS["adm1"]: "REACHED" if not df_rainfall.empty else "NOT REACHED",
+    }
+    return table
 
 def check_rainfall_data():
     xx = _todays_blobs("rainfall_exceedance")
@@ -120,8 +168,10 @@ def get_latest_monitoring_plot(plot_type:str = "storm_track") -> bytes | None:
 
 
 myanmar_time = datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime("%Hh00 %d %b. %Y")
-df_wind_speed = check_wind_speed_trigger_data()
+wind_data = check_wind_speed_trigger_data()
+df_wind_speed = pd.concat(wind_data.values(), ignore_index=True) if wind_data else pd.DataFrame()
 df_rainfall = check_rainfall_data()
+threshold_table = build_threshold_table(wind_data, df_rainfall)
 df_cyclone = check_cyclone_presence()
 phase = determine_trigger_phase(df_cyclone, df_rainfall)
 plot_bytes_storm_track = get_latest_monitoring_plot(plot_type="storm_track")
@@ -142,6 +192,7 @@ if df_wind_speed.empty and df_rainfall.empty:
             info=threshold_info,
             plot_bytes=plot_bytes,
             phase=None,
+            threshold_table=threshold_table,
         )
         campaign_id = create_campaign(
             name="MMR_monitoring_email",
@@ -166,6 +217,7 @@ else:
         info=threshold_info,
         plot_bytes=plot_bytes,
         phase=phase,
+        threshold_table=threshold_table,
     )
     campaign_name = f"MMR_{phase}_email" if phase else "MMR_trigger_email"
     campaign_id = create_campaign(
