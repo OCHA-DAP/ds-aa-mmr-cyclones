@@ -135,10 +135,16 @@ def download_recent_chirps_gefs(
         f"{[str(x.date()) for x in download_dates]}"
     )
 
-    for issue_date in tqdm(
-        download_dates,
-        disable=not sys.stdout.isatty(),
+    for i, issue_date in enumerate(
+        tqdm(
+            download_dates,
+            disable=not sys.stdout.isatty(),
+        ),
+        start=1,
     ):
+        logger.info(
+            f"Issue date {issue_date.date()} ({i}/{len(download_dates)})"
+        )
         for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
             time.sleep(random.uniform(2, 6))
@@ -173,9 +179,14 @@ def download_chirps_gefs(
         f"projects/{constants.PROJECT_PREFIX}/{CHIRPS_GEFS_BLOB_DIR}"
     )
 
+    start_time = time.monotonic()
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
+        logger.info(
+            f"Downloaded {output_filename} ({len(response.content)} bytes) "
+            f"in {time.monotonic() - start_time:.1f}s"
+        )
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmpfile:
             tmpfile.write(response.content)
@@ -190,6 +201,10 @@ def download_chirps_gefs(
 
         with open(output_tmp, "rb") as f:
             stratus.upload_blob_data(data=f, blob_name=output_filename, container_name=output_path)
+        logger.info(
+            f"Uploaded {output_filename} "
+            f"(total {time.monotonic() - start_time:.1f}s)"
+        )
 
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code == 403:
