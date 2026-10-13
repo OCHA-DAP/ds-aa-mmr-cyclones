@@ -175,8 +175,8 @@ def download_chirps_gefs(
         f"chirps-gefs-mmr_issued-"
         f"{issue_date.date()}_valid-{valid_date.date()}.tif"
     )
-    output_path = (
-        f"projects/{constants.PROJECT_PREFIX}/{CHIRPS_GEFS_BLOB_DIR}"
+    blob_name = (
+        f"{constants.PROJECT_PREFIX}/{CHIRPS_GEFS_BLOB_DIR}/{output_filename}"
     )
 
     start_time = time.monotonic()
@@ -200,7 +200,7 @@ def download_chirps_gefs(
                 da_aoi.rio.to_raster(output_tmp, driver="COG")
 
         with open(output_tmp, "rb") as f:
-            stratus.upload_blob_data(data=f, blob_name=output_filename, container_name=output_path)
+            stratus.upload_blob_data(data=f, blob_name=blob_name)
         logger.info(
             f"Uploaded {output_filename} "
             f"(total {time.monotonic() - start_time:.1f}s)"
