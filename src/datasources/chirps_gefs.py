@@ -2,6 +2,10 @@ import datetime
 import html.parser
 import sys
 import tempfile
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+
 import requests
 import ocha_stratus as stratus
 import pandas as pd
@@ -19,17 +23,74 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-CHIRPS_GEFS_URL = (
-    "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/daily_16day/"
-    "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
-    "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
-)
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
-CHIRPS_GEFS_DIR_URL = (
-    "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
-    "CHIRPS-GEFS_precip_v12/daily_16day/{year}/{month:02d}/"
+CHIRPS_GEFS_BLOB_PREFIX = "chirps-gefs-mmr_issued-"
+CHIRPS_GEFS_START_DATE = datetime.date(2026, 3, 15)
+CHIRPS_GEFS_V3_START_DATE = datetime.date(2026, 7, 1)
+DEFAULT_MAX_ISSUE_DATES = 3
+
+
+@dataclass(frozen=True)
+class _ChirpsGefsSource:
+    """URL templates for one version of the CHIRPS-GEFS daily forecasts.
+
+    Attributes:
+        file_url: Template for one daily raster, formatted with
+            ``iss_year``, ``iss_month``, ``iss_day`` and ``valid_year``,
+            ``valid_month``, ``valid_day``.
+        dir_url: Template for a month directory listing, formatted with
+            ``year`` and ``month``. Entries are two-digit issue days.
+    """
+
+    file_url: str
+    dir_url: str
+
+
+_CHIRPS_GEFS_V12 = _ChirpsGefsSource(
+    file_url=(
+        "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
+        "CHIRPS-GEFS_precip_v12/daily_16day/"
+        "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
+        "data.{valid_year}.{valid_month:02d}{valid_day:02d}.tif"
+    ),
+    dir_url=(
+        "https://data.chc.ucsb.edu/products/EWX/data/forecasts/"
+        "CHIRPS-GEFS_precip_v12/daily_16day/{year}/{month:02d}/"
+    ),
 )
+_CHIRPS_GEFS_V3 = _ChirpsGefsSource(
+    file_url=(
+        "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/"
+        "{iss_year}/{iss_month:02d}/{iss_day:02d}/"
+        "c3g_{valid_year}.{valid_month:02d}.{valid_day:02d}.tif"
+    ),
+    dir_url=(
+        "https://data.chc.ucsb.edu/products/CHIRPS-GEFS/v3/daily/global/"
+        "{year}/{month:02d}/"
+    ),
+)
+
+
+def _source_for(issue_date: datetime.date) -> _ChirpsGefsSource:
+    """Return the CHIRPS-GEFS source that serves a given issue date.
+
+    Args:
+        issue_date: Forecast issue date.
+
+    Returns:
+        The v12 source before 2026-07-01 and the v3 source from that date.
+    """
+    if issue_date < CHIRPS_GEFS_V3_START_DATE:
+        return _CHIRPS_GEFS_V12
+    return _CHIRPS_GEFS_V3
+
+
+def _blob_filename(issue_date: pd.Timestamp, valid_date: pd.Timestamp) -> str:
+    """Return the blob file name for an issue and valid date pair."""
+    return (
+        f"{CHIRPS_GEFS_BLOB_PREFIX}{issue_date.date()}"
+        f"_valid-{valid_date.date()}.tif"
+    )
 
 
 class _DirLinkParser(html.parser.HTMLParser):
@@ -65,7 +126,8 @@ def _fetch_available_issue_dates(
     year_months = {(ts.year, ts.month) for ts in candidates}
     available: set[datetime.date] = set()
     for year, month in year_months:
-        url = CHIRPS_GEFS_DIR_URL.format(year=year, month=month)
+        source = _source_for(datetime.date(year, month, 1))
+        url = source.dir_url.format(year=year, month=month)
         try:
             response = requests.get(url, timeout=30)
             response.raise_for_status()
@@ -90,11 +152,22 @@ def _fetch_available_issue_dates(
 
 def download_recent_chirps_gefs(
     date: datetime.date | None = None,
+    max_issue_dates: int | None = DEFAULT_MAX_ISSUE_DATES,
 ) -> None:
     """Download recent CHIRPS-GEFS data up to the specified date.
 
+    An issue date counts as downloaded only when all of its lead-time files
+    are in blob storage. Incomplete dates are topped up with the missing
+    files. The newest missing issue dates are downloaded first.
+
     Args:
         date: The end date for the download range. Defaults to today.
+        max_issue_dates: Maximum number of issue dates to download in this
+            run, or None for no limit.
+
+    Raises:
+        RuntimeError: If the server denies access to a file or directory.
+        azure.core.exceptions.AzureError: If an upload to blob storage fails.
     """
     if date is None:
         date = datetime.date.today()
@@ -103,35 +176,37 @@ def download_recent_chirps_gefs(
     total_bounds = adm0.total_bounds
 
     issue_date_range = pd.date_range(
-        start=f"2026-03-15",
+        start=CHIRPS_GEFS_START_DATE,
         end=date,
         freq="D",
     )
 
     existing_files = stratus.list_container_blobs(
         name_starts_with=f"{constants.PROJECT_PREFIX}/"
-        f"{CHIRPS_GEFS_BLOB_DIR}/"
-        f"chirps-gefs-mmr_issued-{date.year}"
+        f"{CHIRPS_GEFS_BLOB_DIR}/{CHIRPS_GEFS_BLOB_PREFIX}"
     )
-
-    existing_issue_dates = [
-        pd.Timestamp(f.split("issued-")[1].split("_valid-")[0])
-        for f in existing_files
-    ]
-    logger.info(
-        f"Found {len(existing_issue_dates)} existing files for {date.year}"
+    existing_names = {f.rsplit("/", 1)[-1] for f in existing_files}
+    files_per_issue_date = Counter(
+        pd.Timestamp(name.split("issued-")[1].split("_valid-")[0])
+        for name in existing_names
     )
+    logger.info(f"Found {len(existing_names)} existing CHIRPS-GEFS files")
     download_dates = [
-        d for d in issue_date_range if d not in existing_issue_dates
+        d
+        for d in issue_date_range
+        if files_per_issue_date[d] < constants.chirps_gefs_lead_time
     ]
 
     available_on_server = _fetch_available_issue_dates(download_dates)
     download_dates = [
         d for d in download_dates if d.date() in available_on_server
-    ]
+    ][::-1]
+    n_available = len(download_dates)
+    if max_issue_dates is not None:
+        download_dates = download_dates[:max_issue_dates]
     logger.info(
-        f"Downloading {len(download_dates)} new issue dates for {date.year} "
-        f"(after server availability check): "
+        f"Downloading {len(download_dates)} of {n_available} incomplete "
+        f"issue dates available on the server, newest first: "
         f"{[str(x.date()) for x in download_dates]}"
     )
 
@@ -147,6 +222,8 @@ def download_recent_chirps_gefs(
         )
         for leadtime in range(constants.chirps_gefs_lead_time):
             valid_date = issue_date + pd.Timedelta(days=leadtime)
+            if _blob_filename(issue_date, valid_date) in existing_names:
+                continue
             time.sleep(random.uniform(2, 6))
             download_chirps_gefs(
                 issue_date,
@@ -159,22 +236,27 @@ def download_chirps_gefs(
     issue_date: pd.Timestamp,
     valid_date: pd.Timestamp,
     total_bounds,
+) -> None:
+    """Download one CHIRPS-GEFS raster, clip it to the AOI and upload it.
 
-):
-    """Download CHIRPS GEFS data for a specific issue and valid date."""
-    url = CHIRPS_GEFS_URL.format(
+    Args:
+        issue_date: Forecast issue date.
+        valid_date: Date the forecast is valid for.
+        total_bounds: Bounding box (minx, miny, maxx, maxy) to clip to.
+
+    Raises:
+        RuntimeError: If the server returns 403.
+        azure.core.exceptions.AzureError: If the upload fails.
+    """
+    url = _source_for(issue_date.date()).file_url.format(
         iss_year=int(issue_date.year),
         iss_month=int(issue_date.month),
         iss_day=int(issue_date.day),
         valid_year=int(valid_date.year),
         valid_month=int(valid_date.month),
         valid_day=int(valid_date.day),
-        chirps_gefs_lead_time=int(constants.chirps_gefs_lead_time),
     )
-    output_filename = (
-        f"chirps-gefs-mmr_issued-"
-        f"{issue_date.date()}_valid-{valid_date.date()}.tif"
-    )
+    output_filename = _blob_filename(issue_date, valid_date)
     blob_name = (
         f"{constants.PROJECT_PREFIX}/{CHIRPS_GEFS_BLOB_DIR}/{output_filename}"
     )
@@ -183,29 +265,6 @@ def download_chirps_gefs(
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
-        logger.info(
-            f"Downloaded {output_filename} ({len(response.content)} bytes) "
-            f"in {time.monotonic() - start_time:.1f}s"
-        )
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmpfile:
-            tmpfile.write(response.content)
-            temp_filename = tmpfile.name
-
-        with rxr.open_rasterio(temp_filename) as da:
-            da_aoi = da.rio.clip_box(*total_bounds)
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".tif") as tmpfile2:
-                output_tmp = tmpfile2.name
-                da_aoi.rio.to_raster(output_tmp, driver="COG")
-
-        with open(output_tmp, "rb") as f:
-            stratus.upload_blob_data(data=f, blob_name=blob_name)
-        logger.info(
-            f"Uploaded {output_filename} "
-            f"(total {time.monotonic() - start_time:.1f}s)"
-        )
-
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code == 403:
             raise RuntimeError(
@@ -217,13 +276,30 @@ def download_chirps_gefs(
             f"Failed to download CHIRPS GEFS data for "
             f"{issue_date.date()} valid {valid_date.date()}: {e}"
         )
-    except Exception as e:
+        return
+    except requests.RequestException as e:
         logger.warning(
-            f"Failed to download or process CHIRPS GEFS data for "
+            f"Failed to download CHIRPS GEFS data for "
             f"{issue_date.date()} valid {valid_date.date()}: {e}"
         )
-    return
+        return
+    logger.info(
+        f"Downloaded {output_filename} ({len(response.content)} bytes) "
+        f"in {time.monotonic() - start_time:.1f}s"
+    )
 
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_tmp = Path(tmp_dir) / output_filename
+        with rxr.open_rasterio(BytesIO(response.content)) as da:
+            da.rio.clip_box(*total_bounds).rio.to_raster(
+                output_tmp, driver="COG"
+            )
+        with open(output_tmp, "rb") as f:
+            stratus.upload_blob_data(data=f, blob_name=blob_name)
+    logger.info(
+        f"Uploaded {output_filename} "
+        f"(total {time.monotonic() - start_time:.1f}s)"
+    )
 
 
 def load_chirps_gefs_raster(

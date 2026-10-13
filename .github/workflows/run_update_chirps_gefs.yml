@@ -9,15 +9,18 @@ on:
         description: 'Date to process (YYYY-MM-DD). Leave empty for today.'
         required: false
         default: ''
+      max_issue_dates:
+        description: 'Max issue dates to download, newest first (0 = no limit, for backfills).'
+        required: false
+        default: '3'
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    # Downloading a new issue date means 16 sequential lead-time files
-    # (rate-limited fetch + raster reprojection + blob upload each), which
-    # reliably takes just over 10 minutes and was getting cancelled by the
-    # job timeout every day.
-    timeout-minutes: 25
+    # Each issue date is 16 sequential lead-time files (rate-limited fetch +
+    # clip + blob upload, about 7 minutes). Scheduled runs download at most 3
+    # dates; the ceiling leaves room for backfills with a higher limit.
+    timeout-minutes: 180
 
     steps:
     - name: Checkout repository
@@ -41,4 +44,4 @@ jobs:
           if [ -n "${{ inputs.date }}" ]; then
             DATE_ARG="--date ${{ inputs.date }}"
           fi
-          conda run --no-capture-output -n mmr-aa-cyclone python -u -m src.monitoring.update_chirps_gefs $DATE_ARG
+          conda run --no-capture-output -n mmr-aa-cyclone python -u -m src.monitoring.update_chirps_gefs $DATE_ARG --max-issue-dates ${{ inputs.max_issue_dates || 3 }}
