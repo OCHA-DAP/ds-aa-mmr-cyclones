@@ -7,6 +7,7 @@ from typing import Literal
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
 import ocha_stratus as stratus
 from shapely.geometry import box as shapely_box
@@ -273,6 +274,31 @@ def plot_storm_track(
             linewidth=0.8,
             zorder=2,
         )
+
+    restricted = adm_boundaries[
+        adm_boundaries[constants.adm_column].isin(constants.ADM3_LIST)
+    ]
+    if not restricted.empty:
+        restricted.plot(
+            ax=ax,
+            color="#ff8c00",
+            alpha=0.7,
+            edgecolor="black",
+            linewidth=0.8,
+            zorder=2,
+        )
+    ax.legend(
+        handles=[
+            Patch(facecolor="#4682b4", alpha=0.6, edgecolor="black", label="Rakhine"),
+            Patch(
+                facecolor="#ff8c00",
+                alpha=0.7,
+                edgecolor="black",
+                label="Restricted area (selected townships)",
+            ),
+        ],
+        loc="upper left",
+    )
 
     # --- Storm tracks ---
     storms_plot = storms_area_interest.to_crs(epsg=4326)
