@@ -47,31 +47,31 @@ class TestCheckWindSpeedTriggerData:
     def test_loads_latest_blob_per_area_and_source(self) -> None:
         """Keeps only today's latest blob for each (area, source)."""
         blobs = [
-            f"{PREFIX}/wind_exceedance_adm1_{TODAY}_00_ecmwf.csv",
-            f"{PREFIX}/wind_exceedance_adm1_{TODAY}_12_ecmwf.csv",
+            f"{PREFIX}/wind_exceedance_rest_{TODAY}_00_ecmwf.csv",
+            f"{PREFIX}/wind_exceedance_rest_{TODAY}_12_ecmwf.csv",
             f"{PREFIX}/wind_exceedance_adm3_{TODAY}_12_cma.csv",
-            f"{PREFIX}/wind_exceedance_adm1_2020-01-01_12_ecmwf.csv",
+            f"{PREFIX}/wind_exceedance_rest_2020-01-01_12_ecmwf.csv",
         ]
         with patch(STRATUS) as mock_stratus:
             mock_stratus.list_container_blobs.return_value = blobs
             mock_stratus.load_csv_from_blob.return_value = _wind_df()
             result = check_wind_speed_trigger_data()
-        assert set(result) == {("adm1", "ecmwf"), ("adm3", "cma")}
+        assert set(result) == {("rest", "ecmwf"), ("adm3", "cma")}
         loaded = {
             call.kwargs["blob_name"]
             for call in mock_stratus.load_csv_from_blob.call_args_list
         }
-        assert f"{PREFIX}/wind_exceedance_adm1_{TODAY}_12_ecmwf.csv" in loaded
-        assert f"{PREFIX}/wind_exceedance_adm1_{TODAY}_00_ecmwf.csv" not in loaded
+        assert f"{PREFIX}/wind_exceedance_rest_{TODAY}_12_ecmwf.csv" in loaded
+        assert f"{PREFIX}/wind_exceedance_rest_{TODAY}_00_ecmwf.csv" not in loaded
 
     def test_unnamed_storms_dropped(self) -> None:
         """Unnamed storms such as 70B are removed from the data."""
-        blob = f"{PREFIX}/wind_exceedance_adm1_{TODAY}_12_ecmwf.csv"
+        blob = f"{PREFIX}/wind_exceedance_rest_{TODAY}_12_ecmwf.csv"
         with patch(STRATUS) as mock_stratus:
             mock_stratus.list_container_blobs.return_value = [blob]
             mock_stratus.load_csv_from_blob.return_value = _wind_df("70B")
             result = check_wind_speed_trigger_data()
-        assert result[("adm1", "ecmwf")].empty
+        assert result[("rest", "ecmwf")].empty
 
 
 class TestBuildThresholdTable:
@@ -79,19 +79,19 @@ class TestBuildThresholdTable:
 
     def test_reached_and_not_reached_per_area(self) -> None:
         """Wind rows reflect which (area, source) has exceedance data."""
-        table = build_threshold_table({("adm1", "ecmwf"): _wind_df()}, pd.DataFrame())
+        table = build_threshold_table({("rest", "ecmwf"): _wind_df()}, pd.DataFrame())
         assert table["Wind speed (ECMWF)"] == {
-            "Restricted area": "NOT REACHED",
-            "Wider area (Rakhine)": "REACHED",
+            "AA Target area": "NOT REACHED",
+            "Rest of Rakhine": "REACHED",
         }
-        assert table["Wind speed (CMA)"]["Wider area (Rakhine)"] == "NOT REACHED"
+        assert table["Wind speed (CMA)"]["Rest of Rakhine"] == "NOT REACHED"
 
-    def test_rainfall_not_assessed_for_restricted_area(self) -> None:
-        """Rainfall is only assessed for the wider area."""
+    def test_rainfall_not_assessed_for_rest_of_rakhine(self) -> None:
+        """Rainfall is only assessed for the AA Target area."""
         table = build_threshold_table({}, pd.DataFrame({"mean": [1.0]}))
         assert table["Rainfall"] == {
-            "Restricted area": "Not assessed",
-            "Wider area (Rakhine)": "REACHED",
+            "AA Target area": "REACHED",
+            "Rest of Rakhine": "Not assessed",
         }
 
 
@@ -192,7 +192,7 @@ class TestGenerateBodyEmail:
     def test_wind_reached_with_table_and_both_plots(self) -> None:
         """Phase intro, status lines, threshold table and two plots appear."""
         info = {**NOT_REACHED, "wind_speed_threshold_reached": "REACHED"}
-        table = build_threshold_table({("adm1", "ecmwf"): _wind_df()}, pd.DataFrame())
+        table = build_threshold_table({("rest", "ecmwf"): _wind_df()}, pd.DataFrame())
         body = generate_body_email(
             storm_name="CYCLONE_TEST",
             date_myanmar=MYANMAR_TIME,
@@ -204,7 +204,7 @@ class TestGenerateBodyEmail:
         assert "Wind speed threshold: REACHED" in body
         assert "Precipitation threshold: NOT REACHED" in body
         assert "action threshold" in body
-        assert "Wider area (Rakhine)" in body
+        assert "Rest of Rakhine" in body
         assert body.count("data:image/png;base64,") == 2
 
     def test_rainfall_reached_skips_missing_plots(self) -> None:
