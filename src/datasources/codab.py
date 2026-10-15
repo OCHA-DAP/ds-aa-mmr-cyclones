@@ -42,6 +42,19 @@ def load_codab_from_blob(
     return gdf
 
 
+def rest_of_rakhine_townships(adm3: gpd.GeoDataFrame) -> list[str]:
+    """List the ADM3 townships of Rakhine that are not in the AA Target area.
+
+    Args:
+        adm3: ADM3 boundaries with 'ADM1_EN' and the ADM3 name column.
+
+    Returns:
+        Names of the ADM1_LIST townships outside ADM3_LIST.
+    """
+    in_rest = adm3["ADM1_EN"].isin(ADM1_LIST) & ~adm3[adm_column].isin(ADM3_LIST)
+    return adm3.loc[in_rest, adm_column].tolist()
+
+
 def load_aa_target_and_rest_areas() -> dict[str, gpd.GeoDataFrame]:
     """Load the AA Target area and the rest of Rakhine as single-row polygons.
 

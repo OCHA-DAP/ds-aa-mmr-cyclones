@@ -177,7 +177,6 @@ def main():
     hour = now.strftime("%H")
 
     adm_boundaries = codab.load_codab_from_blob(admin_level=constants.adm_level)
-    adm1_boundaries = codab.load_codab_from_blob(admin_level=1)
 
     logger.info("Downloading cyclone forecasts...")
     tracks = download_tracks_ecmwf()
@@ -198,16 +197,16 @@ def main():
             constants.ADM3_LIST,
             constants.wind_speed_alert_level,
         )
-        # Wider area (ADM1_LIST), e.g. Rakhine
-        gdf_adm1_track = compute_wind_speed_at_adm_list(
+        # Rest of Rakhine (ADM1_LIST without the AA Target area)
+        gdf_rest_track = compute_wind_speed_at_adm_list(
             gdf_filtered,
-            adm1_boundaries,
-            "ADM1_EN",
-            constants.ADM1_LIST,
+            adm_boundaries,
+            constants.adm_column,
+            codab.rest_of_rakhine_townships(adm_boundaries),
             constants.wind_speed_alert_level,
         )
-        gdf_track["wind_speed_at_land_adm1"] = gdf_adm1_track["wind_speed_at_land"]
-        gdf_track["exceedance_adm1"] = gdf_adm1_track["exceedance_adm"]
+        gdf_track["wind_speed_at_land_rest"] = gdf_rest_track["wind_speed_at_land"]
+        gdf_track["exceedance_rest"] = gdf_rest_track["exceedance_adm"]
         gdf_track["source"] = "ECMWF"
 
         close_storms = (
@@ -226,8 +225,8 @@ def main():
         wind_storms = get_wind_exceedance(
             gdf_track, "wind_speed_at_land", constants.wind_speed_alert_level
         )
-        wind_storms_adm1 = get_wind_exceedance(
-            gdf_track, "wind_speed_at_land_adm1", constants.wind_speed_alert_level
+        wind_storms_rest = get_wind_exceedance(
+            gdf_track, "wind_speed_at_land_rest", constants.wind_speed_alert_level
         )
 
         # --- CLOSE STORMS ---
@@ -267,18 +266,18 @@ def main():
             logger.info("Data exceeding the wind speed threshold uploaded to blob storage.")
 
 
-        # --- WIND STORMS (wider area, ADM1_LIST) ---
-        if not wind_storms_adm1.empty:
-            logger.info("There are data exceeding the wind speed threshold in ADM1.")
+        # --- WIND STORMS (rest of Rakhine) ---
+        if not wind_storms_rest.empty:
+            logger.info("There are data exceeding the wind speed threshold in the rest of Rakhine.")
             stratus.upload_csv_to_blob(
-                df=wind_storms_adm1,
+                df=wind_storms_rest,
                 blob_name=(
                     f"{constants.PROJECT_PREFIX}/processed/"
-                    f"wind_exceedance_adm1_{today}_{hour}_ecmwf.csv"
+                    f"wind_exceedance_rest_{today}_{hour}_ecmwf.csv"
                 ),
                 stage="dev",
             )
-            logger.info("ADM1 wind exceedance data uploaded to blob storage.")
+            logger.info("Rest of Rakhine wind exceedance data uploaded to blob storage.")
 
 # ----------------------------------------------------
 
