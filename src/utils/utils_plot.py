@@ -479,17 +479,15 @@ def plot_chirps_gefs_forecast(
     file_name: str | None = None,
     save: bool = True,
 ):
-    """Create and upload a stacked bar chart of CHIRPS-GEFS forecast for Rakhine.
+    """Create and upload a stacked bar chart of the CHIRPS-GEFS forecast.
 
     Displays the 3-day rolling sum of precipitation per forecast date for the
     most recent issue date. Each bar is split into daily contributions (day t,
     t-1, t-2), and a dashed threshold line marks the rainfall alert level.
-    With an 'area' column, each forecast date has one bar per area.
 
     Args:
-        df: DataFrame with columns 'issue_date', 'valid_date', and 'mean', and
-            optionally 'area'. May optionally include a pre-computed
-            'rolling_sum_3' column.
+        df: DataFrame with columns 'issue_date', 'valid_date', and 'mean'.
+            May optionally include a pre-computed 'rolling_sum_3' column.
         today: Date string (YYYY-MM-DD) used in the blob file name.
             Defaults to today's date.
         file_name: Override the auto-generated blob file name.
@@ -501,68 +499,66 @@ def plot_chirps_gefs_forecast(
         today = datetime.date.today().strftime("%Y-%m-%d")
 
     df = df.copy()
-    if "area" not in df.columns:
-        df["area"] = "Rakhine"
     if "rolling_sum_3" not in df.columns:
-        df = df.sort_values(["area", "issue_date", "valid_date"])
-        df["rolling_sum_3"] = df.groupby(["area", "issue_date"])["mean"].transform(
-            lambda daily: daily.rolling(3, min_periods=1).sum()
+        df = df.sort_values(["issue_date", "valid_date"])
+        df["rolling_sum_3"] = (
+            df.groupby("issue_date")["mean"]
+            .rolling(3, min_periods=1)
+            .sum()
+            .reset_index(level=0, drop=True)
         )
 
     latest_issue = df["issue_date"].max()
-    df_latest = df[df["issue_date"] == latest_issue]
-    valid_dates = sorted(df_latest["valid_date"].unique())
-    area_names = list(df_latest["area"].unique())
-    area_colors = [
-        ["#c6dbef", "#6baed6", "#2171b5"],
-        ["#fdd0a2", "#fd8d3c", "#d94801"],
-    ]
+    df_plot = (
+        df[df["issue_date"] == latest_issue]
+        .sort_values("valid_date")
+        .reset_index(drop=True)
+    )
 
-    bar_width = 0.6 / len(area_names)
-    date_labels = pd.to_datetime(pd.Series(valid_dates)).dt.strftime("%Y-%m-%d")
+    # Stacked segments: contributions from d-2, d-1, and d to the rolling sum
+    df_plot["contrib_d2"] = df_plot["mean"].shift(periods=2, fill_value=0.0)
+    df_plot["contrib_d1"] = df_plot["mean"].shift(periods=1, fill_value=0.0)
+    df_plot["contrib_d0"] = df_plot["mean"]
+
+    x_pos = range(len(df_plot))
+    bar_width = 0.6
+    colors = ["#ffe0b3", "#ffb84d", "#ff8c00"]  # shades of the map color
+    date_labels = pd.to_datetime(df_plot["valid_date"]).dt.strftime("%Y-%m-%d")
 
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    for area_index, area_name in enumerate(area_names):
-        df_area = (
-            df_latest[df_latest["area"] == area_name]
-            .set_index("valid_date")
-            .reindex(valid_dates)
+    ax.bar(x_pos, df_plot["contrib_d2"], bar_width, color=colors[0], label="Day t+2")
+    ax.bar(
+        x_pos,
+        df_plot["contrib_d1"],
+        bar_width,
+        bottom=df_plot["contrib_d2"],
+        color=colors[1],
+        label="Day t+1",
+    )
+    ax.bar(
+        x_pos,
+        df_plot["contrib_d0"],
+        bar_width,
+        bottom=df_plot["contrib_d2"] + df_plot["contrib_d1"],
+        color=colors[2],
+        label="Day t",
+    )
+
+    for i, row in df_plot.iterrows():
+        ax.text(
+            i,
+            row["rolling_sum_3"] + 1,
+            str(int(round(row["rolling_sum_3"]))),
+            ha="center",
+            va="bottom",
+            fontsize=8,
         )
-        # Stacked segments: contributions from d-2, d-1, and d to the rolling sum
-        contributions = [
-            df_area["mean"].shift(periods=2, fill_value=0.0),
-            df_area["mean"].shift(periods=1, fill_value=0.0),
-            df_area["mean"],
-        ]
-        offset = (area_index - (len(area_names) - 1) / 2) * bar_width
-        x_pos = [i + offset for i in range(len(valid_dates))]
-        bottom = pd.Series(0.0, index=df_area.index)
-        for contribution, color in zip(contributions, area_colors[area_index]):
-            ax.bar(
-                x_pos,
-                contribution,
-                bar_width,
-                bottom=bottom,
-                color=color,
-                edgecolor="white",
-                linewidth=0.5,
-            )
-            bottom = bottom + contribution
-        for x, total in zip(x_pos, df_area["rolling_sum_3"]):
-            ax.text(
-                x,
-                total + 1,
-                str(int(round(total))),
-                ha="center",
-                va="bottom",
-                fontsize=8,
-            )
 
     threshold = constants.rainfall_alert_level_forecast
     ax.axhline(y=threshold, color="crimson", linestyle="--", linewidth=1.5)
     ax.text(
-        len(valid_dates) - 0.5,
+        len(df_plot) - 0.5,
         threshold + 2,
         f"Threshold: {threshold} mm",
         color="crimson",
@@ -570,7 +566,7 @@ def plot_chirps_gefs_forecast(
         ha="right",
     )
 
-    ax.set_xticks(range(len(valid_dates)))
+    ax.set_xticks(list(x_pos))
     ax.set_xticklabels(date_labels, rotation=45, ha="right", fontsize=8)
     ax.set_xlabel("Date", fontsize=12)
     ax.set_ylabel("Total precipitation over 3 days (mm) - forecasted", fontsize=12)
@@ -580,14 +576,7 @@ def plot_chirps_gefs_forecast(
         fontsize=14,
         fontweight="bold",
     )
-    ax.legend(
-        handles=[
-            mpatches.Patch(facecolor=area_colors[i][2], label=name)
-            for i, name in enumerate(area_names)
-        ],
-        title="Bars stacked by day (light to dark: t-2, t-1, t)",
-        loc="upper left",
-    )
+    ax.legend(title="Date", loc="upper left")
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 

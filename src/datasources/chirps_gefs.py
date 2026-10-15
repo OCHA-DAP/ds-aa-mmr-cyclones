@@ -6,7 +6,6 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-import geopandas as gpd
 import requests
 import ocha_stratus as stratus
 import pandas as pd
@@ -411,44 +410,6 @@ def process_recent_chirps_gefs(
 
 def load_recent_chirps_gefs_mean_daily():
     return stratus.load_parquet_from_blob(MEAN_DAILY_BLOB_NAME)
-
-def mean_daily_by_area(
-    issue_date: pd.Timestamp, areas: dict[str, gpd.GeoDataFrame]
-) -> pd.DataFrame:
-    """Mean daily CHIRPS-GEFS rainfall of one issue date, for each area.
-
-    Args:
-        issue_date: Issue date of the forecast to process.
-        areas: Mapping of area name to a GeoDataFrame delimiting the area,
-            in the CRS of the rasters.
-
-    Returns:
-        DataFrame with 'issue_date', 'valid_date', 'area' and 'mean' columns.
-        Empty when no raster exists for the issue date.
-    """
-    das = []
-    for leadtime in range(constants.chirps_gefs_lead_time):
-        valid_date = issue_date + pd.Timedelta(days=leadtime)
-        try:
-            da = load_chirps_gefs_raster(issue_date, valid_date)
-        except ResourceNotFoundError:
-            logger.warning(f"No raster for {issue_date.date()} valid {valid_date.date()}")
-            continue
-        das.append(da.assign_coords(valid_date=valid_date))
-    columns = ["issue_date", "valid_date", "area", "mean"]
-    if not das:
-        return pd.DataFrame(columns=columns)
-    da_all = xr.concat(das, dim="valid_date")
-    dfs = [
-        da_all.rio.clip(area.geometry, all_touched=True)
-        .mean(dim=["x", "y"])
-        .to_dataframe(name="mean")["mean"]
-        .reset_index()
-        .assign(issue_date=issue_date, area=name)
-        for name, area in areas.items()
-    ]
-    return pd.concat(dfs, ignore_index=True)[columns]
-
 
 def check_chirps_gefs_trigger(
     df: pd.DataFrame, date: datetime.date | None = None

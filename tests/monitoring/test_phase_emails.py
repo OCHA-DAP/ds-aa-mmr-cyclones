@@ -86,28 +86,25 @@ def _dummy_storm_gdf() -> GeoDataFrame:
 
 
 def _dummy_rainfall_df(above_threshold: bool) -> pd.DataFrame:
-    """Build a minimal two-area CHIRPS-GEFS DataFrame for testing.
+    """Build a minimal CHIRPS-GEFS DataFrame for testing.
 
     Args:
-        above_threshold: When True, use daily means of 65 mm for the AA Target
-            area so that the 3-day rolling sum reaches 195 mm, exceeding the
-            175 mm alert level. When False, use low values well below the
-            threshold. The rest of Rakhine gets 60% of those values.
+        above_threshold: When True, use daily means of 65 mm so that the
+            3-day rolling sum reaches 195 mm, exceeding the 175 mm alert
+            level. When False, use low values well below the threshold.
 
     Returns:
-        DataFrame with 'issue_date', 'valid_date', 'area' and 'mean' columns.
+        DataFrame with 'issue_date', 'valid_date', and 'mean' columns.
     """
     issue_date = pd.Timestamp("2026-06-29")
-    target_mean = 65.0 if above_threshold else 10.0
+    mean_value = 65.0 if above_threshold else 10.0
     return pd.DataFrame(
         [
             {
                 "issue_date": issue_date,
                 "valid_date": issue_date + pd.Timedelta(days=lt),
-                "area": area,
-                "mean": target_mean * factor,
+                "mean": mean_value,
             }
-            for area, factor in (("AA Target area", 1.0), ("Rest of Rakhine", 0.6))
             for lt in range(5)
         ]
     )
