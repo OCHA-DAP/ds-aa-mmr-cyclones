@@ -275,11 +275,11 @@ def plot_storm_track(
             zorder=2,
         )
 
-    restricted = adm_boundaries[
+    target_area = adm_boundaries[
         adm_boundaries[constants.adm_column].isin(constants.ADM3_LIST)
     ]
-    if not restricted.empty:
-        restricted.plot(
+    if not target_area.empty:
+        target_area.plot(
             ax=ax,
             color="#ff8c00",
             alpha=0.7,
@@ -294,7 +294,7 @@ def plot_storm_track(
                 facecolor="#ff8c00",
                 alpha=0.7,
                 edgecolor="black",
-                label="Restricted area (selected townships)",
+                label="AA Target area",
             ),
         ],
         loc="upper left",

@@ -190,7 +190,7 @@ def main():
         return
     else:
 
-        # Restricted area (ADM3_LIST): drives distances and the trigger
+        # AA Target area (ADM3_LIST): drives distances and the trigger
         gdf_track = compute_wind_speed_at_adm_list(
             gdf_filtered,
             adm_boundaries,
@@ -254,7 +254,7 @@ def main():
                 filter_name="all",
             )
 
-        # --- WIND STORMS (restricted area, ADM3_LIST) ---
+        # --- WIND STORMS (AA Target area, ADM3_LIST) ---
         if not wind_storms.empty:
             logger.info("There are data exceeding the wind speed threshold.")
             file_name = f"wind_exceedance_adm3_{today}_{hour}_ecmwf.csv"

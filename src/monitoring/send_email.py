@@ -31,7 +31,7 @@ def _todays_blobs(prefix: str) -> list[str]:
 
 WIND_FILE_REGEX = re.compile(r"wind_exceedance_(adm[13])_.*_(\w+)\.csv$")
 AREA_LABELS = {
-    "adm3": "Restricted area",
+    "adm3": "AA Target area",
     "adm1": "Wider area (Rakhine)",
 }
 
@@ -61,7 +61,7 @@ def build_threshold_table(
     """Build the threshold status table: rows are components, columns areas.
 
     Rainfall is only computed for the wider area, so it is "Not assessed"
-    for the restricted one.
+    for the AA Target area.
 
     Args:
         wind_data: Output of ``check_wind_speed_trigger_data``.

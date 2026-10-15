@@ -183,7 +183,7 @@ def plot_map_storms_speed_area_interest(gdf, adm, analysis_suff,  save: bool = F
     plt.show()
 
 
-def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bool = False, adm_level = 1, cerf=False, title_suff:str=""):
+def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bool = False, adm_level = 1, cerf=False, title_suff:str="", ax=None, ylabel:str="3 Days mean precipitation [mm/per unit area]", x_column:str="max_wind_speed_land", landfall_column:str="landfall"):
     adm_column = f"ADM{adm_level}_EN"
     unique_adms = df[adm_column].unique()
     n_adms = len(unique_adms)
@@ -206,21 +206,25 @@ def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bo
             color_map = {adm: cmap(i) for i, adm in enumerate(unique_adms)}
 
     # --- Plot ---
-    fig, ax = plt.subplots(figsize=(10, 6))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(10, 6))
+    else:
+        fig = ax.figure
 
     # Plot circles (landfall == False)
-    mask_circle = ~df["landfall"]
+    mask_circle = ~df[landfall_column]
     ax.scatter(
-        df.loc[mask_circle, "max_wind_speed_land"],
+        df.loc[mask_circle, x_column],
         df.loc[mask_circle, y_column],
         c=df.loc[mask_circle, color_column].map(color_map),
         marker="o", alpha=0.7, edgecolor="k", label=None
     )
 
     # Plot squares (landfall == True)
-    mask_square = df["landfall"]
+    mask_square = df[landfall_column]
     ax.scatter(
-        df.loc[mask_square, "max_wind_speed_land"],
+        df.loc[mask_square, x_column],
         df.loc[mask_square, y_column],
         c=df.loc[mask_square, color_column].map(color_map),
         marker="s", alpha=0.7, edgecolor="k", label=None
@@ -228,12 +232,12 @@ def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bo
 
     # Axis labels
     ax.set_xlabel("Max wind speed [knots]", fontsize=12)
-    ax.set_ylabel("3 Days mean precipitation [mm/per unit area]", fontsize=12)
+    ax.set_ylabel(ylabel, fontsize=12)
 
     # ✅ Add storm names as text
     for _, row in df.iterrows():
         ax.text(
-            row["max_wind_speed_land"], row[y_column],
+            row[x_column], row[y_column],
             str(row["storm_name"]),
             fontsize=8, transform=offset_copy(ax.transData, x=3, y=3, units='points', fig=fig)
         )
@@ -285,11 +289,38 @@ def overview_situation(df, analysis_suff, y_column:str="3days_rain_mean",save:bo
     ax.scatter([], [], color="k", marker="o", label="No landfall")
     ax.scatter([], [], color="k", marker="s", label="Landfall")
 
+    if not standalone:
+        return
     ax.legend(title="Legend", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.title(f"{title_suff}")
     plt.tight_layout()
     if save:
         plt.savefig(f"mmr_overview_{analysis_suff}_{title_suff}.png", bbox_inches="tight", dpi=dpi)
+    plt.show()
+
+
+def overview_situation_two_areas(df, analysis_suff, panels: dict[str, tuple[str, str, str]], cerf=False, adm_level=3, save: bool = False, ylabel: str = "3 Days mean precipitation [mm]"):
+    """Plot max wind speed vs 3-day rainfall side by side, one panel per area.
+
+    Args:
+        df: Storm table with storm_name and the wind, landfall and rainfall columns.
+        analysis_suff: Suffix used in the output file name.
+        panels: Mapping of panel title to (wind speed column on the x axis,
+            landfall column, rainfall column on the y axis).
+        cerf: Color points by CERF allocation when True.
+        adm_level: Admin level used to color points when cerf is False.
+        save: Save the figure to mmr_overview_two_areas_<analysis_suff>.png when True.
+        ylabel: Label of the y axis.
+    """
+    fig, axes = plt.subplots(1, len(panels), figsize=(10 * len(panels) / 1.4, 6), sharex=True, sharey=True)
+    for ax, (title, (x_column, landfall_column, y_column)) in zip(axes, panels.items()):
+        overview_situation(df, analysis_suff, y_column=y_column, adm_level=adm_level, cerf=cerf, ax=ax, ylabel=ylabel, x_column=x_column, landfall_column=landfall_column)
+        ax.set_title(title)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, title="Legend", loc="center left", bbox_to_anchor=(1.0, 0.5))
+    fig.tight_layout()
+    if save:
+        fig.savefig(f"mmr_overview_two_areas_{analysis_suff}.png", bbox_inches="tight", dpi=dpi)
     plt.show()
 
 

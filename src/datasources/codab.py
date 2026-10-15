@@ -1,7 +1,15 @@
 import ocha_stratus as stratus
 import requests
 
-from src.utils.constants import ISO3, PROJECT_PREFIX
+import geopandas as gpd
+
+from src.utils.constants import (
+    ADM1_LIST,
+    ADM3_LIST,
+    ISO3,
+    PROJECT_PREFIX,
+    adm_column,
+)
 from src.utils import blob_utils
 
 
@@ -32,3 +40,24 @@ def load_codab_from_blob(
             stage="dev",
         )
     return gdf
+
+
+def load_aa_target_and_rest_areas() -> dict[str, gpd.GeoDataFrame]:
+    """Load the AA Target area and the rest of Rakhine as single-row polygons.
+
+    The AA Target area is the union of the ADM3_LIST townships. The rest of
+    Rakhine is the difference between the ADM1_LIST state and that area.
+
+    Returns:
+        Mapping of area name ("AA Target area", "Rest of Rakhine") to a
+        GeoDataFrame in EPSG:4326 with one 'geometry' row and an 'area' column.
+    """
+    adm1 = load_codab_from_blob(admin_level=1)
+    adm3 = load_codab_from_blob(admin_level=3)
+    target = adm3.loc[adm3[adm_column].isin(ADM3_LIST)].union_all()
+    rakhine = adm1.loc[adm1["ADM1_EN"].isin(ADM1_LIST)].union_all()
+    geometries = {"AA Target area": target, "Rest of Rakhine": rakhine.difference(target)}
+    return {
+        name: gpd.GeoDataFrame({"area": [name]}, geometry=[geometry], crs=adm1.crs).to_crs(4326)
+        for name, geometry in geometries.items()
+    }
