@@ -24,6 +24,11 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 CHIRPS_GEFS_BLOB_DIR = "raw/chirps_gefs"
+# Mean daily rainfall over the AA Target area (the area the trigger checks)
+MEAN_DAILY_BLOB_NAME = (
+    f"{constants.PROJECT_PREFIX}/processed/chirps_gefs/"
+    "mmr_chirps_gefs_mean_daily_aa_target.parquet"
+)
 CHIRPS_GEFS_BLOB_PREFIX = "chirps-gefs-mmr_issued-"
 CHIRPS_GEFS_START_DATE = datetime.date(2026, 3, 15)
 CHIRPS_GEFS_V3_START_DATE = datetime.date(2026, 7, 1)
@@ -343,8 +348,7 @@ def process_recent_chirps_gefs(
         existing_df = pd.DataFrame(
             columns=["issue_date", "valid_date", "mean"]
         )
-    adm1 = codab.load_codab_from_blob(admin_level=1)
-    adm1 = adm1[adm1["ADM1_EN"].isin(constants.ADM1_LIST)]
+    aa_target_area = codab.load_aa_target_and_rest_areas()["AA Target area"]
     issue_date_range = pd.date_range(
         start=f"{date.year}-03-25",
         end=date,
@@ -384,7 +388,7 @@ def process_recent_chirps_gefs(
                 f"Processing {len(das_i)} files for issue_date {issue_date}"
             )
             da_i = xr.concat(das_i, dim="valid_date")
-            da_i_clip = da_i.rio.clip(adm1.geometry, all_touched=True)
+            da_i_clip = da_i.rio.clip(aa_target_area.geometry, all_touched=True)
             df_in = (
                 da_i_clip.mean(dim=["x", "y"])
                 .to_dataframe(name="mean")["mean"]
@@ -398,24 +402,22 @@ def process_recent_chirps_gefs(
             )
 
     updated_df = pd.concat(dfs + [existing_df], ignore_index=True)
-    blob_name = (
-        f"{constants.PROJECT_PREFIX}/processed/chirps_gefs/"
-        f"mmr_chirps_gefs_mean_daily.parquet"
+    stratus.upload_parquet_to_blob(
+        blob_name=MEAN_DAILY_BLOB_NAME, df=updated_df
     )
-    stratus.upload_parquet_to_blob(blob_name=blob_name, df=updated_df)
     return updated_df
 
 
 def load_recent_chirps_gefs_mean_daily():
-    return stratus.load_parquet_from_blob(
-        f"{constants.PROJECT_PREFIX}/processed/chirps_gefs/"
-        "mmr_chirps_gefs_mean_daily.parquet"
-    )
+    return stratus.load_parquet_from_blob(MEAN_DAILY_BLOB_NAME)
 
 def check_chirps_gefs_trigger(
     df: pd.DataFrame, date: datetime.date | None = None
 ) -> None:
-    """Check CHIRPS-GEFS data against the rainfall threshold.
+    """Check the latest CHIRPS-GEFS forecast against the rainfall threshold.
+
+    Only the most recent issue date is checked, so that exceedances of past
+    forecasts do not trigger again.
 
     Args:
         df: DataFrame with CHIRPS-GEFS mean daily data.
@@ -424,14 +426,8 @@ def check_chirps_gefs_trigger(
     if date is None:
         date = datetime.date.today()
     date_str = date.strftime("%Y-%m-%d")
-    df = df.sort_values(["issue_date", "valid_date"])
-
-    df["rolling_sum_3"] = (
-        df.groupby(["issue_date"])["mean"]
-        .rolling(3, min_periods=1)
-        .sum()
-        .reset_index(level=[0, 1], drop=True)
-    )
+    df = df[df["issue_date"] == df["issue_date"].max()].sort_values("valid_date")
+    df = df.assign(rolling_sum_3=df["mean"].rolling(3, min_periods=1).sum())
     df_trigger_rainfall = df[
         df["rolling_sum_3"] >= constants.rainfall_alert_level_forecast
     ]

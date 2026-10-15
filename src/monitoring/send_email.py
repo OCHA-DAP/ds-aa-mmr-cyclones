@@ -29,10 +29,10 @@ def _todays_blobs(prefix: str) -> list[str]:
     return sorted(b for b in blobs if today in b)
 
 
-WIND_FILE_REGEX = re.compile(r"wind_exceedance_(adm[13])_.*_(\w+)\.csv$")
+WIND_FILE_REGEX = re.compile(r"wind_exceedance_(adm3|rest)_.*_(\w+)\.csv$")
 AREA_LABELS = {
-    "adm3": "Restricted area",
-    "adm1": "Wider area (Rakhine)",
+    "adm3": "AA Target area",
+    "rest": "Rest of Rakhine",
 }
 
 
@@ -41,7 +41,7 @@ def check_wind_speed_trigger_data() -> dict[tuple[str, str], pd.DataFrame]:
 
     Returns:
         Mapping of (area, source) to the exceedance DataFrame (named storms
-        only), e.g. ``("adm1", "ecmwf")``. Empty when no file exists today.
+        only), e.g. ``("rest", "ecmwf")``. Empty when no file exists today.
     """
     latest: dict[tuple[str, str], str] = {}
     for blob in _todays_blobs("wind_exceedance_"):
@@ -60,8 +60,8 @@ def build_threshold_table(
 ) -> dict[str, dict[str, str]]:
     """Build the threshold status table: rows are components, columns areas.
 
-    Rainfall is only computed for the wider area, so it is "Not assessed"
-    for the restricted one.
+    Rainfall is only computed for the AA Target area, so it is "Not assessed"
+    for the rest of Rakhine.
 
     Args:
         wind_data: Output of ``check_wind_speed_trigger_data``.
@@ -84,8 +84,8 @@ def build_threshold_table(
         for source in sources
     }
     table["Rainfall"] = {
-        AREA_LABELS["adm3"]: "Not assessed",
-        AREA_LABELS["adm1"]: "REACHED" if not df_rainfall.empty else "NOT REACHED",
+        AREA_LABELS["adm3"]: "REACHED" if not df_rainfall.empty else "NOT REACHED",
+        AREA_LABELS["rest"]: "Not assessed",
     }
     return table
 

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-issue-dates",
         type=int,
-        default=DEFAULT_MAX_ISSUE_DATES,
+        default=0,
         help=(
             "Maximum number of issue dates to download in this run, newest "
             "first. Use 0 for no limit (e.g. for a backfill)."
