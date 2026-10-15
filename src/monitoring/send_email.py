@@ -167,66 +167,69 @@ def get_latest_monitoring_plot(plot_type:str = "storm_track") -> bytes | None:
     return stratus.load_blob_data(blob_name=xx[-1])
 
 
-myanmar_time = datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime("%Hh00 %d %b. %Y")
-wind_data = check_wind_speed_trigger_data()
-df_wind_speed = pd.concat(wind_data.values(), ignore_index=True) if wind_data else pd.DataFrame()
-df_rainfall = check_rainfall_data()
-threshold_table = build_threshold_table(wind_data, df_rainfall)
-df_cyclone = check_cyclone_presence()
-phase = determine_trigger_phase(df_cyclone, df_rainfall)
-plot_bytes_storm_track = get_latest_monitoring_plot(plot_type="storm_track")
-plot_bytes_rainfall = get_latest_monitoring_plot(plot_type="rainfall_forecast")
-plot_bytes = [plot_bytes_storm_track, plot_bytes_rainfall]
+def main() -> None:
+    """Send the monitoring or trigger email for today's data, if any."""
+    myanmar_time = datetime.datetime.now(ZoneInfo("Asia/Yangon")).strftime("%Hh00 %d %b. %Y")
+    wind_data = check_wind_speed_trigger_data()
+    df_wind_speed = pd.concat(wind_data.values(), ignore_index=True) if wind_data else pd.DataFrame()
+    df_rainfall = check_rainfall_data()
+    threshold_table = build_threshold_table(wind_data, df_rainfall)
+    df_cyclone = check_cyclone_presence()
+    phase = determine_trigger_phase(df_cyclone, df_rainfall)
+    plot_bytes_storm_track = get_latest_monitoring_plot(plot_type="storm_track")
+    plot_bytes_rainfall = get_latest_monitoring_plot(plot_type="rainfall_forecast")
+    plot_bytes = [plot_bytes_storm_track, plot_bytes_rainfall]
 
-if df_wind_speed.empty and df_rainfall.empty:
-    threshold_info = {
-        "wind_speed_threshold_reached": "NOT REACHED",
-        "rainfall_threshold_reached": "NOT REACHED",
-    }
-    logger.info("No thresholds were met, checking for existence of Cyclones to be monitored")
-    if not df_cyclone.empty:
-        storm_name = df_cyclone.storm_name.unique()[0]
+    if df_wind_speed.empty and df_rainfall.empty:
+        threshold_info = {
+            "wind_speed_threshold_reached": "NOT REACHED",
+            "rainfall_threshold_reached": "NOT REACHED",
+        }
+        logger.info("No thresholds were met, checking for existence of Cyclones to be monitored")
+        if not df_cyclone.empty:
+            storm_name = df_cyclone.storm_name.unique()[0]
+            campaign_body = generate_body_email(
+                storm_name=storm_name,
+                date_myanmar=myanmar_time,
+                info=threshold_info,
+                plot_bytes=plot_bytes,
+                phase=None,
+                threshold_table=threshold_table,
+            )
+            campaign_id = create_campaign(
+                name="MMR_monitoring_email",
+                body=campaign_body,
+                subject=f"Anticipatory Action Myanmar - {myanmar_time}",
+            )
+            send_campaign(campaign_id=campaign_id)
+            logger.info("Monitoring email sent successfully!")
+    else:
+        storm_name = (
+            df_wind_speed.sid.unique()[0]
+            if not df_wind_speed.empty
+            else df_cyclone.storm_name.unique()[0]
+        )
+        threshold_info = {
+            "wind_speed_threshold_reached": "REACHED" if not df_wind_speed.empty else "NOT REACHED",
+            "rainfall_threshold_reached": "REACHED" if not df_rainfall.empty else "NOT REACHED",
+        }
         campaign_body = generate_body_email(
             storm_name=storm_name,
             date_myanmar=myanmar_time,
             info=threshold_info,
             plot_bytes=plot_bytes,
-            phase=None,
+            phase=phase,
             threshold_table=threshold_table,
         )
+        campaign_name = f"MMR_{phase}_email" if phase else "MMR_trigger_email"
         campaign_id = create_campaign(
-            name="MMR_monitoring_email",
+            name=campaign_name,
             body=campaign_body,
             subject=f"Anticipatory Action Myanmar - {myanmar_time}",
         )
         send_campaign(campaign_id=campaign_id)
-        logger.info("Monitoring email sent successfully!")
-else:
-    storm_name = (
-        df_wind_speed.sid.unique()[0]
-        if not df_wind_speed.empty
-        else df_cyclone.storm_name.unique()[0]
-    )
-    threshold_info = {
-        "wind_speed_threshold_reached": "REACHED" if not df_wind_speed.empty else "NOT REACHED",
-        "rainfall_threshold_reached": "REACHED" if not df_rainfall.empty else "NOT REACHED",
-    }
-    campaign_body = generate_body_email(
-        storm_name=storm_name,
-        date_myanmar=myanmar_time,
-        info=threshold_info,
-        plot_bytes=plot_bytes,
-        phase=phase,
-        threshold_table=threshold_table,
-    )
-    campaign_name = f"MMR_{phase}_email" if phase else "MMR_trigger_email"
-    campaign_id = create_campaign(
-        name=campaign_name,
-        body=campaign_body,
-        subject=f"Anticipatory Action Myanmar - {myanmar_time}",
-    )
-    send_campaign(campaign_id=campaign_id)
-    logger.info(f"Trigger email sent successfully (phase: {phase})!")
+        logger.info(f"Trigger email sent successfully (phase: {phase})!")
 
 
-
+if __name__ == "__main__":
+    main()
