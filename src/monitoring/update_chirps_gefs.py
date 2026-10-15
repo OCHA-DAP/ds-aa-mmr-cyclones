@@ -4,6 +4,7 @@ import datetime
 from dotenv import load_dotenv
 
 from src.datasources.chirps_gefs import (
+    DEFAULT_MAX_ISSUE_DATES,
     check_chirps_gefs_trigger,
     download_recent_chirps_gefs,
     process_recent_chirps_gefs,
@@ -24,12 +25,23 @@ if __name__ == "__main__":
         default=None,
         help="Date to process (YYYY-MM-DD). Defaults to today.",
     )
+    parser.add_argument(
+        "--max-issue-dates",
+        type=int,
+        default=0,
+        help=(
+            "Maximum number of issue dates to download in this run, newest "
+            "first. Use 0 for no limit (e.g. for a backfill)."
+        ),
+    )
     args = parser.parse_args()
 
     logger.info("Starting the CHIRPS-GEFS update pipeline...")
 
     logger.info("Downloading recent CHIRPS-GEFS data...")
-    download_recent_chirps_gefs(date=args.date)
+    download_recent_chirps_gefs(
+        date=args.date, max_issue_dates=args.max_issue_dates or None
+    )
 
     logger.info("Process recent CHIRPS-GEFS data...")
     df = process_recent_chirps_gefs(date=args.date)

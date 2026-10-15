@@ -7,6 +7,7 @@ from typing import Literal
 import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import pandas as pd
 import ocha_stratus as stratus
 from shapely.geometry import box as shapely_box
@@ -65,8 +66,8 @@ def compute_distance_to_land(gdf_track, gdf_land):
     """
 
     # project to meters
-    gdf_track = gdf_track.to_crs(3857)
-    gdf_land = gdf_land.to_crs(3857)
+    gdf_track = gdf_track.to_crs(constants.MMR_UTM)
+    gdf_land = gdf_land.to_crs(constants.MMR_UTM)
 
     distances = []
 
@@ -110,7 +111,7 @@ def compute_wind_speed_at_adm_list(
         threshold: Wind speed threshold (knots).
 
     Returns:
-        GeoDataFrame in EPSG:3857 with the ``min_dist_km`` and wind columns
+        GeoDataFrame in the MMR_UTM CRS with the ``min_dist_km`` and wind columns
         relative to ``adm_list``, plus ``wind_speed_at_land_country`` (wind
         speed relative to all of Myanmar) and ``exceedance_adm`` (nearest
         ADM name where the country-wide wind speed reaches ``threshold``,
@@ -133,7 +134,7 @@ def compute_wind_speed_at_adm_list(
     if exceeds.any():
         nearest = gpd.sjoin_nearest(
             gdf_country.loc[exceeds, ["geometry"]],
-            gdf_adm.to_crs(3857)[[adm_column, "geometry"]],
+            gdf_adm.to_crs(constants.MMR_UTM)[[adm_column, "geometry"]],
             how="left",
         )
         nearest = nearest[~nearest.index.duplicated()]
@@ -273,6 +274,31 @@ def plot_storm_track(
             linewidth=0.8,
             zorder=2,
         )
+
+    target_area = adm_boundaries[
+        adm_boundaries[constants.adm_column].isin(constants.ADM3_LIST)
+    ]
+    if not target_area.empty:
+        target_area.plot(
+            ax=ax,
+            color="#ff8c00",
+            alpha=0.7,
+            edgecolor="black",
+            linewidth=0.8,
+            zorder=2,
+        )
+    ax.legend(
+        handles=[
+            Patch(facecolor="#4682b4", alpha=0.6, edgecolor="black", label="Rest of Rakhine"),
+            Patch(
+                facecolor="#ff8c00",
+                alpha=0.7,
+                edgecolor="black",
+                label="AA Target area",
+            ),
+        ],
+        loc="upper left",
+    )
 
     # --- Storm tracks ---
     storms_plot = storms_area_interest.to_crs(epsg=4326)

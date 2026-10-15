@@ -3,6 +3,7 @@ from pyproj import Geod
 from shapely.ops import nearest_points
 from src.utils.constants import *
 geod = Geod(ellps="WGS84")
+import numpy as np
 import pandas as pd
 import hashlib
 
@@ -102,6 +103,44 @@ def find_nearest_polygon(gdf_points, gdf_polygons, crs_projected=MMR_UTM):
     gdf_result = gdf_joined.loc[:, gdf_joined.columns.str.startswith(tuple(keep_cols))].copy()
 
     return gdf_result
+
+def max_wind_speed_land_per_storm(
+    df_track: pd.DataFrame, area: gpd.GeoDataFrame
+) -> pd.DataFrame:
+    """Max wind speed at land per storm for an area, plus a landfall flag.
+
+    Each track point's wind is reduced with its distance to the area
+    (0.9807 * exp(-0.003 * distance_km)). Points inside the area keep their
+    raw wind speed. The point with the highest reduced wind speed is kept per
+    storm.
+
+    Args:
+        df_track: Track points with 'sid', 'wind_speed' and a 'geometry' WKT
+            column in the MMR_UTM CRS.
+        area: Polygons of the area of interest.
+
+    Returns:
+        DataFrame indexed by 'sid' with columns 'max_wind_speed_land' and
+        'landfall' (True when the selected point lies inside the area).
+    """
+    points = gpd.GeoSeries.from_wkt(df_track["geometry"], crs=MMR_UTM)
+    area_union = area.to_crs(epsg=MMR_UTM).union_all()
+    distance_km = points.distance(area_union) / 1000
+    reduced = 0.9807 * np.exp(-0.003 * distance_km) * df_track["wind_speed"]
+    per_point = pd.DataFrame(
+        {
+            "sid": df_track["sid"],
+            "landfall": distance_km == 0,
+            "wind_speed": df_track["wind_speed"],
+            "reduced": reduced,
+        }
+    )
+    best = per_point.loc[per_point.groupby("sid")["reduced"].idxmax()]
+    best = best.assign(
+        max_wind_speed_land=best["wind_speed"].where(best["landfall"], best["reduced"])
+    )
+    return best.set_index("sid")[["max_wind_speed_land", "landfall"]]
+
 
 def compute_return_period(year_max:int, year_min:int, num_alerts:int ):
     return_period = (year_max - year_min +1)/num_alerts
