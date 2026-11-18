@@ -16,6 +16,7 @@ dependencies:
   - xarray
   - eccodes
   - cfgrib
+  - lxml
   - pip
   - pip:
       - ocha-stratus
