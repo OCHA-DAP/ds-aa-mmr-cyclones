@@ -78,3 +78,9 @@ ADM3_LIST = [
     "Myebon",
 ]
 ADM_LIST = ADM3_LIST  # areas at constants.adm_level
+
+# Areas monitored for the thresholds, keyed by the code used in blob names.
+AREA_LABELS = {
+    "adm3": "AA Target area",
+    "rest": "Rest of Rakhine",
+}

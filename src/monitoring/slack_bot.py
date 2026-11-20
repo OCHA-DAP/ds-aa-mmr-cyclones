@@ -6,10 +6,10 @@ See: https://api.slack.com/messaging/webhooks
 
 import datetime
 import os
+import re
 from dotenv import load_dotenv
 
 import ocha_stratus as stratus
-import pandas as pd
 import requests
 
 import src.utils.constants as constants
@@ -19,6 +19,11 @@ load_dotenv()
 logger = get_logger(__name__)
 
 GITHUB_REPO = os.getenv("GITHUB_REPO", "ocha-dap/ds-aa-mmr-cyclones")
+WIND_AREA_REGEX = re.compile(r"wind_exceedance_(adm3|rest)_")
+RAINFALL_PREFIXES = {
+    "rainfall_exceedance": constants.AREA_LABELS["adm3"],
+    "rest_rainfall_exceedance": constants.AREA_LABELS["rest"],
+}
 WORKFLOWS = [
     "run_monitoring.yml",
     "run_update_ecmwf.yml",
@@ -101,21 +106,34 @@ def build_signals_text() -> tuple[str, int]:
     wind_blobs = _latest_blob_today("wind_exceedance_")
     if wind_blobs:
         n_alerts += 1
-        sids = pd.concat(
-            [stratus.load_csv_from_blob(blob_name=blob)["sid"] for blob in wind_blobs]
+        storms_by_area: dict[str, set[str]] = {}
+        for blob in wind_blobs:
+            area = constants.AREA_LABELS[WIND_AREA_REGEX.search(blob).group(1)]
+            sids = stratus.load_csv_from_blob(blob_name=blob)["sid"]
+            storms_by_area.setdefault(area, set()).update(
+                sid_to_name.get(str(sid), str(sid)) for sid in sids
+            )
+        wind_text = "; ".join(
+            f"{area}: {', '.join(sorted(names))}"
+            for area, names in sorted(storms_by_area.items())
         )
-        wind_names = sorted({sid_to_name.get(str(sid), str(sid)) for sid in sids})
         lines.append(
             f":rotating_light: *Wind threshold exceeded* ({constants.wind_speed_alert_level} kt)"
-            f" — {', '.join(wind_names)}"
+            f" — {wind_text}"
         )
     else:
         lines.append(f":large_green_circle: Wind threshold not exceeded ({constants.wind_speed_alert_level} kt)")
 
-    rainfall_blobs = _latest_blob_today("rainfall_exceedance")
-    if rainfall_blobs:
+    rainfall_areas = [
+        area
+        for prefix, area in RAINFALL_PREFIXES.items()
+        if _latest_blob_today(prefix)
+    ]
+    if rainfall_areas:
         n_alerts += 1
-        lines.append(":rotating_light: *Rainfall threshold exceeded*")
+        lines.append(
+            f":rotating_light: *Rainfall threshold exceeded* — {', '.join(rainfall_areas)}"
+        )
     else:
         lines.append(":large_green_circle: Rainfall threshold not exceeded")
 

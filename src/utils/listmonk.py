@@ -2,7 +2,10 @@ import base64
 import os
 from typing import Dict, List
 
+import pandas as pd
 import requests
+
+from src.utils import constants
 
 BASE_URL = "https://listmonk-demo-afhcg8e2hde0fxca.eastus2-01.azurewebsites.net/api"  # noqa
 
@@ -108,24 +111,120 @@ _PHASE_INTROS: Dict[str, str] = {
     ),
     "action": (
         "The <strong>action threshold</strong> has been reached for Cyclone {storm_name}. "
-        "The forecast indicates landfall in approximately 48&ndash;72 hours. "
+        "The forecast indicates landfall within approximately 72 hours. "
         "All anticipatory actions in line with the framework should now commence."
     ),
     "observational": (
         "Cyclone {storm_name} is now in the <strong>observational phase</strong>. "
-        "Landfall is forecast within 48 hours. "
         "The situation is being closely monitored."
     ),
 }
 
 
+_TABLE_CELL = "border: 1px solid #ccc; padding: 4px 10px;"
+
+_AA_TOWNSHIP_LEADS: Dict[str | None, str] = {
+    "readiness": (
+        "Readiness activities in line with the anticipatory action framework "
+        "should now commence in the following townships prioritized for "
+        "anticipatory action:"
+    ),
+    "action": (
+        "All anticipatory actions in line with the framework should now "
+        "commence in the following townships prioritized for anticipatory "
+        "action:"
+    ),
+}
+_AA_TOWNSHIP_LEAD_DEFAULT = (
+    "The trigger thresholds are currently projected to be met in the "
+    "following townships prioritized for anticipatory action:"
+)
+_REST_TOWNSHIP_LEAD = (
+    "<strong>Additional information:</strong> The trigger thresholds are "
+    "currently also projected to be met in the following townships in "
+    "Rakhine not prioritized for anticipatory action under the framework:"
+)
+
+
+def _format_forecast(value: float, threshold: float) -> str:
+    """Format a forecast value, in bold when it reaches the threshold.
+
+    Args:
+        value: Forecast value, NaN when there is no data.
+        threshold: Threshold above which the value is highlighted.
+
+    Returns:
+        HTML string, "n/a" when the value is missing.
+    """
+    if pd.isna(value):
+        return "n/a"
+    text = f"{value:.0f}"
+    return f"<strong>{text}</strong>" if value >= threshold else text
+
+
+def _render_township_table(townships: pd.DataFrame) -> str:
+    """Render the townships reaching a trigger threshold as an HTML table.
+
+    Args:
+        townships: DataFrame with 'township', 'wind' (knots) and 'rainfall'
+            (mm, 3-day sum) columns. Values at or above their threshold are
+            shown in bold.
+
+    Returns:
+        HTML table string.
+    """
+    header = "".join(
+        f'<th style="{_TABLE_CELL}">{title}</th>'
+        for title in (
+            "Township",
+            "Wind speed forecast (kt)",
+            "3-day rainfall forecast (mm)",
+        )
+    )
+    rows = "".join(
+        f'<tr><td style="{_TABLE_CELL}">{row.township}</td>'
+        f'<td style="{_TABLE_CELL}">'
+        f"{_format_forecast(row.wind, constants.wind_speed_alert_level)}</td>"
+        f'<td style="{_TABLE_CELL}">'
+        f"{_format_forecast(row.rainfall, constants.rainfall_alert_level_forecast)}</td></tr>"
+        for row in townships.itertuples()
+    )
+    return f'<table style="border-collapse: collapse;"><tr>{header}</tr>{rows}</table>'
+
+
+def _render_township_sections(
+    townships_reached: Dict[str, pd.DataFrame] | None, phase: str | None
+) -> str:
+    """Render the AA township table and the other townships as a sentence.
+
+    Args:
+        townships_reached: Mapping of area label to the DataFrame of townships
+            reaching a threshold in that area, or None.
+        phase: Trigger phase, used to word the lead sentence.
+
+    Returns:
+        HTML string, empty when no township reached a threshold.
+    """
+    if not townships_reached:
+        return ""
+    target = townships_reached.get(constants.AREA_LABELS["adm3"])
+    rest = townships_reached.get(constants.AREA_LABELS["rest"])
+    sections = []
+    if target is not None and not target.empty:
+        lead = _AA_TOWNSHIP_LEADS.get(phase, _AA_TOWNSHIP_LEAD_DEFAULT)
+        sections.append(f"{lead}<br>{_render_township_table(target)}")
+    if rest is not None and not rest.empty:
+        sections.append(f"{_REST_TOWNSHIP_LEAD} {', '.join(rest['township'])}.")
+    return "".join(f"<br>{section}<br>" for section in sections)
+
+
 def _render_threshold_table(
     threshold_table: Dict[str, Dict[str, str]] | None,
 ) -> str:
-    """Render the threshold status by area as an HTML table.
+    """Render the threshold status as an HTML table.
 
     Args:
-        threshold_table: Mapping of row label to {area label: status}, or
+        threshold_table: Mapping of row label to {column label: value}, or
             None.
 
     Returns:
@@ -133,18 +232,19 @@ def _render_threshold_table(
     """
     if not threshold_table:
         return ""
-    areas = list(next(iter(threshold_table.values())))
-    cell = "border: 1px solid #ccc; padding: 4px 10px;"
-    header = "".join(f'<th style="{cell}">{area}</th>' for area in areas)
+    columns = list(next(iter(threshold_table.values())))
+    header = "".join(f'<th style="{_TABLE_CELL}">{column}</th>' for column in columns)
     rows = "".join(
-        f'<tr><td style="{cell}">{label}</td>'
-        + "".join(f'<td style="{cell}">{status[area]}</td>' for area in areas)
+        f'<tr><td style="{_TABLE_CELL}">{label}</td>'
+        + "".join(
+            f'<td style="{_TABLE_CELL}">{values[column]}</td>' for column in columns
+        )
         + "</tr>"
-        for label, status in threshold_table.items()
+        for label, values in threshold_table.items()
     )
     return (
         '<br><table style="border-collapse: collapse;">'
-        f'<tr><th style="{cell}"></th>{header}</tr>{rows}</table>'
+        f'<tr><th style="{_TABLE_CELL}"></th>{header}</tr>{rows}</table>'
     )
 
 
@@ -155,6 +255,7 @@ def generate_body_email(
     plot_bytes: List[bytes] | None = None,
     phase: str | None = None,
     threshold_table: Dict[str, Dict[str, str]] | None = None,
+    townships_reached: Dict[str, pd.DataFrame] | None = None,
 ):
     """Generate HTML email body for cyclone monitoring/trigger emails.
 
@@ -166,8 +267,11 @@ def generate_body_email(
         plot_bytes: list of Raw PNG bytes of the needed plot, or None.
         phase: Trigger phase - 'readiness', 'action', 'observational', or
             None for a generic monitoring email.
-        threshold_table: Optional mapping of row label to {area label:
-            status}, rendered as a table of threshold status by area.
+        threshold_table: Optional mapping of row label to {column label:
+            value}, rendered as a table of the threshold, worst forecast and
+            status of each trigger component.
+        townships_reached: Optional mapping of area label to the townships
+            reaching a threshold there, rendered as tables.
 
     Returns:
         HTML string for the email body.
@@ -176,12 +280,10 @@ def generate_body_email(
         phase_text = _PHASE_INTROS[phase].format(storm_name=storm_name)
         intro_body = (
             f"{phase_text}<br><br>"
-            f"Dear colleagues,<br>"
             f"Please find more information below.<br>"
         )
     else:
         intro_body = (
-            "Dear colleagues,<br>"
             "A new forecast track has been released by ECMWF (European Centre for "
             "Medium-Range Weather Forecasts). Also included is the forecasted "
             "precipitation from CHIRPS-GEFS.<br>"
@@ -189,11 +291,13 @@ def generate_body_email(
         )
 
     HTML_INTRO = f"""
+    Dear colleagues,<br><br>
     {storm_name} - {date_myanmar} (Myanmar local time) <br>
     {intro_body}
     Wind speed threshold: {info["wind_speed_threshold_reached"]}<br>
     Precipitation threshold: {info["rainfall_threshold_reached"]}<br>
     {_render_threshold_table(threshold_table)}
+    {_render_township_sections(townships_reached, phase)}
     <br><br>
     """
     HTML_PLOT = ""

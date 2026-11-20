@@ -6,6 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+import geopandas as gpd
 import requests
 import ocha_stratus as stratus
 import pandas as pd
@@ -411,8 +412,78 @@ def process_recent_chirps_gefs(
 def load_recent_chirps_gefs_mean_daily():
     return stratus.load_parquet_from_blob(MEAN_DAILY_BLOB_NAME)
 
+def mean_daily_by_area(
+    issue_date: pd.Timestamp, areas: dict[str, gpd.GeoDataFrame]
+) -> pd.DataFrame:
+    """Mean daily CHIRPS-GEFS rainfall of one issue date, for each area.
+
+    Args:
+        issue_date: Issue date of the forecast to process.
+        areas: Mapping of area name to a GeoDataFrame delimiting the area,
+            in the CRS of the rasters.
+
+    Returns:
+        DataFrame with 'issue_date', 'valid_date', 'area' and 'mean' columns.
+        Empty when no raster exists for the issue date.
+    """
+    das = []
+    for leadtime in range(constants.chirps_gefs_lead_time):
+        valid_date = issue_date + pd.Timedelta(days=leadtime)
+        try:
+            da = load_chirps_gefs_raster(issue_date, valid_date)
+        except ResourceNotFoundError:
+            logger.warning(f"No raster for {issue_date.date()} valid {valid_date.date()}")
+            continue
+        das.append(da.assign_coords(valid_date=valid_date))
+    columns = ["issue_date", "valid_date", "area", "mean"]
+    if not das:
+        return pd.DataFrame(columns=columns)
+    da_all = xr.concat(das, dim="valid_date")
+    dfs = [
+        da_all.rio.clip(area.geometry, all_touched=True)
+        .mean(dim=["x", "y"])
+        .to_dataframe(name="mean")["mean"]
+        .reset_index()
+        .assign(issue_date=issue_date, area=name)
+        for name, area in areas.items()
+    ]
+    return pd.concat(dfs, ignore_index=True)[columns]
+
+
+def worst_rainfall_by_area(
+    df: pd.DataFrame, group_of_township: dict[str, str]
+) -> pd.DataFrame:
+    """Worst 3-day rainfall sum of the latest forecast, for each area.
+
+    Args:
+        df: DataFrame with 'issue_date', 'valid_date', 'area' and 'mean'
+            columns, as returned by ``mean_daily_by_area``.
+        group_of_township: Mapping of township name to the label of the area
+            it belongs to. Areas that are not townships are their own group.
+
+    Returns:
+        DataFrame with 'area', 'max_rolling_sum_3' (mm), 'group' and
+        'is_township' columns, one row per area.
+    """
+    latest = df[df["issue_date"] == df["issue_date"].max()].sort_values("valid_date")
+    worst = (
+        latest.groupby("area")["mean"]
+        .rolling(3, min_periods=1)
+        .sum()
+        .groupby(level="area")
+        .max()
+        .rename("max_rolling_sum_3")
+        .reset_index()
+    )
+    worst["group"] = worst["area"].map(group_of_township).fillna(worst["area"])
+    worst["is_township"] = worst["area"].isin(group_of_township)
+    return worst
+
+
 def check_chirps_gefs_trigger(
-    df: pd.DataFrame, date: datetime.date | None = None
+    df: pd.DataFrame,
+    date: datetime.date | None = None,
+    file_prefix: str = "rainfall_exceedance",
 ) -> None:
     """Check the latest CHIRPS-GEFS forecast against the rainfall threshold.
 
@@ -422,6 +493,7 @@ def check_chirps_gefs_trigger(
     Args:
         df: DataFrame with CHIRPS-GEFS mean daily data.
         date: The date to use for output file naming. Defaults to today.
+        file_prefix: Prefix of the exceedance file name, to tell areas apart.
     """
     if date is None:
         date = datetime.date.today()
@@ -434,7 +506,7 @@ def check_chirps_gefs_trigger(
     if not df_trigger_rainfall.empty:
         file_name = (
             f"{constants.PROJECT_PREFIX}/processed/"
-            f"rainfall_exceedance_{date_str}.csv"
+            f"{file_prefix}_{date_str}.csv"
         )
         stratus.upload_csv_to_blob(blob_name=file_name, df=df_trigger_rainfall)
         logger.info("Rainfall threshold exceeded.")

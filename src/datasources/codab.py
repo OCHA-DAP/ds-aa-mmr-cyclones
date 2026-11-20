@@ -6,6 +6,7 @@ import geopandas as gpd
 from src.utils.constants import (
     ADM1_LIST,
     ADM3_LIST,
+    AREA_LABELS,
     ISO3,
     PROJECT_PREFIX,
     adm_column,
@@ -53,6 +54,40 @@ def rest_of_rakhine_townships(adm3: gpd.GeoDataFrame) -> list[str]:
     """
     in_rest = adm3["ADM1_EN"].isin(ADM1_LIST) & ~adm3[adm_column].isin(ADM3_LIST)
     return adm3.loc[in_rest, adm_column].tolist()
+
+
+def township_groups(adm3: gpd.GeoDataFrame) -> dict[str, list[str]]:
+    """Group the monitored townships by area.
+
+    Args:
+        adm3: ADM3 boundaries with 'ADM1_EN' and the ADM3 name column.
+
+    Returns:
+        Mapping of area label ("AA Target area", "Rest of Rakhine") to the
+        names of its townships.
+    """
+    return {
+        AREA_LABELS["adm3"]: ADM3_LIST,
+        AREA_LABELS["rest"]: rest_of_rakhine_townships(adm3),
+    }
+
+
+def load_township_areas() -> dict[str, gpd.GeoDataFrame]:
+    """Load each monitored township as its own area.
+
+    Returns:
+        Mapping of township name to a GeoDataFrame in EPSG:4326 with the
+        township 'geometry' and a 'group' column holding the area label
+        ("AA Target area" or "Rest of Rakhine").
+    """
+    adm3 = load_codab_from_blob(admin_level=3)
+    return {
+        township: adm3.loc[adm3[adm_column] == township, ["geometry"]]
+        .to_crs(4326)
+        .assign(group=group)
+        for group, townships in township_groups(adm3).items()
+        for township in townships
+    }
 
 
 def load_aa_target_and_rest_areas() -> dict[str, gpd.GeoDataFrame]:

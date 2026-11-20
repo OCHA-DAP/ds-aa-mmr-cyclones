@@ -143,6 +143,44 @@ def compute_wind_speed_at_adm_list(
     return gdf_result
 
 
+def compute_wind_speed_by_township(
+    gdf_track: gpd.GeoDataFrame,
+    gdf_adm: gpd.GeoDataFrame,
+    adm_column: str,
+    township_groups: dict[str, list[str]],
+) -> pd.DataFrame:
+    """Compute the worst wind speed at land of each ensemble member by township.
+
+    Args:
+        gdf_track: GeoDataFrame of track points with ``sid``,
+            ``ensemble_number``, ``max_sustained_wind`` (m/s) and a point
+            geometry.
+        gdf_adm: GeoDataFrame of ADM boundaries with ``adm_column``.
+        adm_column: Column of ``gdf_adm`` holding the ADM names.
+        township_groups: Mapping of area label to the names of its townships.
+
+    Returns:
+        DataFrame with one row per ``sid``/``ensemble_number``/township and
+        the ``township``, ``group`` and ``wind_speed_at_land`` (knots, maximum
+        over the track) columns.
+    """
+    gdf_track = gdf_track.reset_index(drop=True)
+    frames = [
+        compute_wind_speed_at_land(
+            compute_distance_to_land(
+                gdf_track, gdf_adm[gdf_adm[adm_column] == township]
+            )
+        )
+        .groupby(["sid", "ensemble_number"])["wind_speed_at_land"]
+        .max()
+        .reset_index()
+        .assign(township=township, group=group)
+        for group, townships in township_groups.items()
+        for township in townships
+    ]
+    return pd.concat(frames, ignore_index=True)
+
+
 def get_wind_exceedance(
     gdf_track: pd.DataFrame, wind_column: str, threshold: float
 ) -> pd.DataFrame:

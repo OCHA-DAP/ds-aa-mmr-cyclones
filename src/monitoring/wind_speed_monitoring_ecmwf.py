@@ -22,6 +22,7 @@ from src.utils.utils_windpseed import (
     compute_wind_speed_at_adm_list,
     get_wind_exceedance,
     compute_wind_speed_at_land,
+    compute_wind_speed_by_township,
     plot_storm_track,
 )
 from src.utils.logging import get_logger
@@ -240,6 +241,21 @@ def main():
                 stage="dev",
             )
             logger.info("Monitoring data uploaded to blob storage.")
+
+            stratus.upload_csv_to_blob(
+                df=compute_wind_speed_by_township(
+                    storms_area_interest,
+                    adm_boundaries,
+                    constants.adm_column,
+                    codab.township_groups(adm_boundaries),
+                ),
+                blob_name=(
+                    f"{constants.PROJECT_PREFIX}/processed/"
+                    f"wind_township_{today}_{hour}_ecmwf.csv"
+                ),
+                stage="dev",
+            )
+            logger.info("Wind speed by township uploaded to blob storage.")
             storms_area_interest_plot = storms_area_interest.loc[storms_area_interest["wind_speed_at_land"] >= 30, :]
             if storms_area_interest_plot.empty:
                 storms_area_interest_plot = storms_area_interest
