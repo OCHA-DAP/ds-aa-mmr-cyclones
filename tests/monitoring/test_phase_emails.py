@@ -37,6 +37,62 @@ _PHASE_THRESHOLD_INFO: dict[str | None, dict[str, str]] = {
 }
 
 
+def _dummy_threshold_table(threshold_info: dict[str, str]) -> dict[str, dict[str, str]]:
+    """Build the AA Target area threshold table shown in the email.
+
+    Args:
+        threshold_info: Wind speed and rainfall status of the test case.
+
+    Returns:
+        Mapping of row label to {column label: value}.
+    """
+    wind = threshold_info["wind_speed_threshold_reached"]
+    rainfall = threshold_info["rainfall_threshold_reached"]
+    return {
+        "Wind speed (ECMWF)": {
+            "Threshold": "47 kt",
+            "Worst forecast": "52 kt" if wind == "REACHED" else "30 kt",
+            "Status": wind,
+        },
+        "Wind speed (CMA)": {
+            "Threshold": "47 kt",
+            "Worst forecast": "28 kt",
+            "Status": "NOT REACHED",
+        },
+        "Rainfall": {
+            "Threshold": "175 mm (3-day sum)",
+            "Worst forecast": "190 mm" if rainfall == "REACHED" else "60 mm",
+            "Status": rainfall,
+        },
+    }
+
+
+def _dummy_townships_reached(
+    threshold_info: dict[str, str],
+) -> dict[str, pd.DataFrame]:
+    """Build the townships reaching a threshold for one test case.
+
+    Args:
+        threshold_info: Wind speed and rainfall status of the test case.
+
+    Returns:
+        Mapping of area label to the townships reaching a threshold there.
+    """
+    reached = "REACHED" in threshold_info.values()
+    return {
+        "AA Target area": pd.DataFrame(
+            {"township": ["Sittwe", "Pauktaw"], "wind": [52.0, 49.0], "rainfall": [190.0, 120.0]}
+        )
+        if reached
+        else pd.DataFrame(columns=["township", "wind", "rainfall"]),
+        "Rest of Rakhine": pd.DataFrame(
+            {"township": ["Thandwe"], "wind": [48.0], "rainfall": [80.0]}
+        )
+        if reached
+        else pd.DataFrame(columns=["township", "wind", "rainfall"]),
+    }
+
+
 def _dummy_storm_gdf() -> GeoDataFrame:
     """Build a synthetic two-track GeoDataFrame with points near Rakhine.
 
@@ -86,25 +142,28 @@ def _dummy_storm_gdf() -> GeoDataFrame:
 
 
 def _dummy_rainfall_df(above_threshold: bool) -> pd.DataFrame:
-    """Build a minimal CHIRPS-GEFS DataFrame for testing.
+    """Build a minimal two-area CHIRPS-GEFS DataFrame for testing.
 
     Args:
-        above_threshold: When True, use daily means of 65 mm so that the
-            3-day rolling sum reaches 195 mm, exceeding the 175 mm alert
-            level. When False, use low values well below the threshold.
+        above_threshold: When True, use daily means of 65 mm for the AA Target
+            area so that the 3-day rolling sum reaches 195 mm, exceeding the
+            175 mm alert level. When False, use low values well below the
+            threshold. The rest of Rakhine gets 60% of those values.
 
     Returns:
-        DataFrame with 'issue_date', 'valid_date', and 'mean' columns.
+        DataFrame with 'issue_date', 'valid_date', 'area' and 'mean' columns.
     """
     issue_date = pd.Timestamp("2026-06-29")
-    mean_value = 65.0 if above_threshold else 10.0
+    target_mean = 65.0 if above_threshold else 10.0
     return pd.DataFrame(
         [
             {
                 "issue_date": issue_date,
                 "valid_date": issue_date + pd.Timedelta(days=lt),
-                "mean": mean_value,
+                "area": area,
+                "mean": target_mean * factor,
             }
+            for area, factor in (("AA Target area", 1.0), ("Rest of Rakhine", 0.6))
             for lt in range(5)
         ]
     )
@@ -194,6 +253,8 @@ def test_send_phase_email(
         info=threshold_info,
         plot_bytes=[storm_track_bytes, rainfall_bytes],
         phase=phase,
+        threshold_table=_dummy_threshold_table(threshold_info),
+        townships_reached=_dummy_townships_reached(threshold_info),
     )
     campaign_id = create_campaign(
         name=f"test_{phase_label}_email",

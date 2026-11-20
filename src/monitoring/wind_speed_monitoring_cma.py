@@ -8,6 +8,7 @@ import pandas as pd
 import ocha_stratus as stratus
 from src.utils.utils_windpseed import (
     compute_wind_speed_at_adm_list,
+    compute_wind_speed_by_township,
     get_wind_exceedance,
     plot_storm_track,
 )
@@ -164,6 +165,21 @@ def main():
                 stage="dev",
             )
             logger.info("Monitoring data uploaded to blob storage.")
+
+            stratus.upload_csv_to_blob(
+                df=compute_wind_speed_by_township(
+                    storms_area_interest,
+                    adm_boundaries,
+                    constants.adm_column,
+                    codab.township_groups(adm_boundaries),
+                ),
+                blob_name=(
+                    f"{constants.PROJECT_PREFIX}/processed/"
+                    f"wind_township_{today}_{hour}_cma.csv"
+                ),
+                stage="dev",
+            )
+            logger.info("Wind speed by township uploaded to blob storage.")
 
             # Generate and upload plot
             plot_storm_track(

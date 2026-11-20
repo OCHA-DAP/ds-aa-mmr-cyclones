@@ -5,6 +5,7 @@ from shapely.geometry import Point, box
 
 from src.utils.utils_windpseed import (
     compute_wind_speed_at_adm_list,
+    compute_wind_speed_by_township,
     get_wind_exceedance,
 )
 
@@ -67,3 +68,16 @@ def test_get_wind_exceedance_keeps_members_at_threshold():
     )
     result = get_wind_exceedance(track, "wind", threshold=47)
     assert result["sid"].tolist() == ["A"]
+
+
+def test_wind_by_township_is_reduced_with_distance(gdf_adm):
+    track = _track([Point(92.5, 20.5)], wind_ms=40.0).assign(
+        sid="s1", ensemble_number=0
+    )
+    result = compute_wind_speed_by_township(
+        track, gdf_adm, ADM_COLUMN, {"AA": ["Sittwe"], "Rest": ["Yangon"]}
+    ).set_index("township")
+
+    assert result.loc["Sittwe", "group"] == "AA"
+    assert result.loc["Sittwe", "wind_speed_at_land"] >= 47
+    assert result.loc["Yangon", "wind_speed_at_land"] < 47
